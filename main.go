@@ -83,10 +83,10 @@ func main() {
 	defer cancel()
 
 	db, err := repositories.InitializeDatabase(ctx, repositories.DatabaseConfig{
-		DBPath:              config.DBPath,
-		MaxOpenConnections:  10,
-		MaxIdleConnections:  5,
-		ConnMaxLifetime:     5 * time.Minute,
+		DBPath:             config.DBPath,
+		MaxOpenConnections: 10,
+		MaxIdleConnections: 5,
+		ConnMaxLifetime:    5 * time.Minute,
 	}, logger)
 	if err != nil {
 		logger.Error("Failed to initialize database", slog.String("error", err.Error()))
@@ -98,7 +98,7 @@ func main() {
 	mux := http.NewServeMux()
 
 	// Create handlers
-	uploadHandler := handlers.NewUploadHandler(logger)
+	uploadHandler := handlers.NewUploadHandler(logger, db)
 
 	// Register basic health check endpoint
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
@@ -109,32 +109,7 @@ func main() {
 	})
 
 	// Register root endpoint
-	mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
-		logger.DebugContext(r.Context(), "Root request")
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.WriteHeader(http.StatusOK)
-		fmt.Fprintf(w, `
-<!DOCTYPE html>
-<html>
-<head>
-	<title>Expense Tracking Application</title>
-	<meta charset="UTF-8">
-	<meta name="viewport" content="width=device-width, initial-scale=1.0">
-</head>
-<body>
-	<h1>Welcome to Expense Tracking Application</h1>
-	<p>Application is running successfully.</p>
-	<p>Database: %s</p>
-	<p>Environment:</p>
-	<ul>
-		<li>Log Level: %s</li>
-		<li>Port: %d</li>
-	</ul>
-	<p><a href="/upload">Upload CSV File</a></p>
-</body>
-</html>
-`, config.DBPath, config.LogLevel.String(), config.PORT)
-	})
+	mux.HandleFunc("GET /", uploadHandler.HandleGetDashboard)
 
 	// Register upload routes
 	mux.HandleFunc("GET /upload", uploadHandler.HandleGetUpload)

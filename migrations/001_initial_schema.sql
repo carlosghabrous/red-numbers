@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS expenses (
     description TEXT NOT NULL,
     amount REAL NOT NULL,
     balance REAL NOT NULL,
-    category_id INTEGER NOT NULL,
+    category_id INTEGER,
     confidence_level TEXT DEFAULT 'low',
     imported_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     corrected_at TIMESTAMP,

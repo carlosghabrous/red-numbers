@@ -71,44 +71,44 @@ This document organizes the expense tracking application implementation into 11 
 
 ### Tasks
 
-- [~] 2.1 Create database schema and migrations
+- [x] 2.1 Create database schema and migrations
   - Create Expenses table: id, date, description, amount, saldo, category_id, confidence_level, imported_at
   - Create Categories table: id, name, display_name
   - Create Classification_Rules table: id, pattern, category_id, created_at, updated_at, priority
   - Add database indexes on date, category_id, description
   - _Requirements: 12.0_
 
-- [~] 2.2 Implement ExpenseRepository with CRUD methods
+- [x] 2.2 Implement ExpenseRepository with CRUD methods
   - Create ExpenseRepository.Create(expense) method
   - Create ExpenseRepository.GetAll() method
   - Implement transaction handling for batch inserts
   - _Requirements: 1.0, 12.0_
 
-- [~] 2.3 Integrate database storage into CSV upload flow
+- [x] 2.3 Integrate database storage into CSV upload flow
   - After successful CSV parsing, store expenses to database
   - Update upload response to show "X expenses saved to database"
   - Handle database errors gracefully with user-friendly messages
   - _Requirements: 1.0, 12.0_
 
-- [~] 2.4 Create dashboard page that loads expenses from database
+- [x] 2.4 Create dashboard page that loads expenses from database
   - Create GET / route to serve dashboard
   - Query all expenses from database
   - Render expenses table from stored data
   - _Requirements: 1.0, 12.0_
 
-- [~] 2.5 Add database initialization to app startup
+- [x] 2.5 Add database initialization to app startup
   - Auto-create schema if not exists
   - Verify database integrity on startup
   - Log migration status
   - _Requirements: 12.0_
 
-- [ ]* 2.6 Write unit tests for ExpenseRepository
+- [x] 2.6 Write unit tests for ExpenseRepository
   - Test Create and GetAll methods
   - Test transaction rollback on error
   - Test index performance with 1000+ records
   - _Requirements: 12.0_
 
-- [ ]* 2.7 Write integration test for persistence
+- [x] 2.7 Write integration test for persistence
   - Upload CSV and insert expenses
   - Verify data in database
   - Restart app and verify data still present

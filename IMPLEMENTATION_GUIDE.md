@@ -89,23 +89,24 @@ go run main.go
 - ✅ Project setup (Go module, directories, main.go)
 - ✅ Database schema and migrations
 - ✅ Initial data models created
+- ✅ Slice 1: CSV Upload and Raw Display
+- ✅ Slice 2: Database Storage and Persistence
 
-**Ready to implement:**
-- 🔲 Slice 1: CSV Upload and Raw Display
+**Next to implement:**
+- 🔲 Slice 3: Basic Classification
 
-## What to Implement First
+## What to Implement Next
 
-Start with **Slice 1: CSV Upload and Raw Display**
+Continue with **Slice 3: Basic Classification**
 
-This slice requires:
-1. **CSV upload endpoint** - GET /upload serves form, POST /upload handles file
-2. **CSV parser** - Find the required header row, then extract fecha de operación, concepto, fecha valor, importe, and saldo
-3. **HTML table** - Display parsed expenses in a web page
-4. **Basic styling** - Make it readable
+Slice 1 established the upload and raw display flow, and Slice 2 added persistence. The next slice adds:
+1. **Keyword patterns** - Define matching terms for each expense category
+2. **Fuzzy classification** - Assign categories and confidence levels to persisted expenses
+3. **Dashboard results** - Display category and confidence with each expense
 
-**Success:** Upload a CSV file → See all rows in a table on localhost:8080
+**Success:** Upload a CSV file → See each expense classified on the dashboard
 
-This gives you a foundation to build on. Slice 2 adds database persistence, Slice 3 adds classification, etc.
+This adds category assignment on top of the persisted expense data.
 
 ## Development Flow
 
@@ -165,4 +166,4 @@ Each requirement and design section includes examples and acceptance criteria.
 
 ---
 
-**Next Step:** Start with Slice 1 tasks in `tasks.md`. Upload CSV and display raw data first!
+**Next Step:** Start with Slice 3 tasks in `tasks.md` and add basic classification.

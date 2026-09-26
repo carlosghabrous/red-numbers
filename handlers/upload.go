@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"database/sql"
 	"fmt"
 	"html"
 	"io"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/ghab/red-numbers/models"
+	"github.com/ghab/red-numbers/repositories"
 	"github.com/ghab/red-numbers/services"
 )
 
@@ -19,14 +21,19 @@ import (
 type UploadHandler struct {
 	logger    *slog.Logger
 	csvParser *services.CSVParser
+	expenses  *repositories.ExpenseRepository
 }
 
 // NewUploadHandler creates a new upload handler
-func NewUploadHandler(logger *slog.Logger) *UploadHandler {
-	return &UploadHandler{
+func NewUploadHandler(logger *slog.Logger, db ...*sql.DB) *UploadHandler {
+	handler := &UploadHandler{
 		logger:    logger,
 		csvParser: services.NewCSVParser(),
 	}
+	if len(db) > 0 && db[0] != nil {
+		handler.expenses = repositories.NewExpenseRepository(db[0])
+	}
+	return handler
 }
 
 // HandleGetUpload serves the CSV upload form
@@ -299,9 +306,77 @@ func (h *UploadHandler) HandlePostUpload(w http.ResponseWriter, r *http.Request)
 	defer os.Remove(tempFile)
 
 	h.logger.InfoContext(r.Context(), "CSV parsed successfully", slog.Int("expense_count", len(expenses)))
+	savedCount := 0
+	if h.expenses != nil {
+		if err := h.expenses.CreateBatch(r.Context(), expenses); err != nil {
+			h.logger.ErrorContext(r.Context(), "Failed to save expenses", slog.String("error", err.Error()))
+			h.renderUploadError(w, "Failed to save expenses to the database", nil)
+			return
+		}
+		savedCount = len(expenses)
+	}
 
 	// Render success response with parsed expenses
-	h.renderUploadSuccess(w, header.Filename, expenses, skippedRows)
+	h.renderUploadSuccess(w, header.Filename, expenses, skippedRows, savedCount)
+}
+
+// HandleGetDashboard renders all expenses stored in SQLite.
+func (h *UploadHandler) HandleGetDashboard(w http.ResponseWriter, r *http.Request) {
+	if h.expenses == nil {
+		h.renderUploadError(w, "Database is not configured", nil)
+		return
+	}
+
+	expenses, err := h.expenses.GetAll(r.Context())
+	if err != nil {
+		h.logger.ErrorContext(r.Context(), "Failed to load expenses", slog.String("error", err.Error()))
+		h.renderUploadError(w, "Failed to load expenses from the database", nil)
+		return
+	}
+
+	h.renderDashboard(w, expenses)
+}
+
+func (h *UploadHandler) renderDashboard(w http.ResponseWriter, expenses []models.Expense) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+
+	rows := ""
+	for _, expense := range expenses {
+		rows += fmt.Sprintf(`<tr><td>%s</td><td>%s</td><td>%.2f€</td><td>%.2f€</td></tr>`,
+			expense.Date.Format("02/01/2006"), html.EscapeString(expense.Description), expense.Amount, expense.Balance)
+	}
+
+	fmt.Fprintf(w, `<!DOCTYPE html>
+<html>
+<head>
+	<title>Expense Dashboard</title>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<style>
+		body { font-family: sans-serif; background: #f5f5f5; padding: 20px; }
+		.container { max-width: 1000px; margin: 0 auto; background: #fff; padding: 32px; }
+		table { width: 100%%; border-collapse: collapse; }
+		th, td { padding: 10px 12px; border-bottom: 1px solid #ddd; text-align: left; }
+		th { background: #f5f5f5; }
+		.table-scroll { overflow-x: auto; }
+		a { display: inline-block; margin-top: 20px; }
+	</style>
+</head>
+<body>
+	<div class="container">
+		<h1>Expense Dashboard</h1>
+		<p>%d expenses stored in the database.</p>
+		<div class="table-scroll">
+			<table>
+				<thead><tr><th>Date</th><th>Description</th><th>Amount</th><th>Balance</th></tr></thead>
+				<tbody>%s</tbody>
+			</table>
+		</div>
+		<a href="/upload">Upload another CSV</a>
+	</div>
+</body>
+</html>`, len(expenses), rows)
 }
 
 // renderUploadError renders an error page for upload failures
@@ -408,7 +483,7 @@ func (h *UploadHandler) renderUploadError(w http.ResponseWriter, errMsg string, 
 }
 
 // renderUploadSuccess renders a success page with parsed expenses
-func (h *UploadHandler) renderUploadSuccess(w http.ResponseWriter, filename string, expenses []models.Expense, skippedRows int) {
+func (h *UploadHandler) renderUploadSuccess(w http.ResponseWriter, filename string, expenses []models.Expense, skippedRows int, savedCount int) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 
@@ -572,6 +647,10 @@ func (h *UploadHandler) renderUploadSuccess(w http.ResponseWriter, filename stri
 				<span class="summary-label">Rows skipped:</span>
 				<span class="summary-value">%d</span>
 			</div>
+			<div class="summary-row">
+				<span class="summary-label">Expenses saved to database:</span>
+				<span class="summary-value">%d</span>
+			</div>
 		</div>
 
 		<h2 style="font-size: 18px; margin-bottom: 15px; color: #333;">Parsed Expenses Preview</h2>
@@ -597,7 +676,7 @@ func (h *UploadHandler) renderUploadSuccess(w http.ResponseWriter, filename stri
 		</div>
 	</div>
 </body>
-</html>`, html.EscapeString(filename), len(expenses), skippedRows, tableRows)
+</html>`, html.EscapeString(filename), len(expenses), skippedRows, savedCount, tableRows)
 
 	fmt.Fprint(w, html)
 }
