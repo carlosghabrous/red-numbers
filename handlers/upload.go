@@ -156,6 +156,17 @@ func (h *UploadHandler) HandleGetUpload(w http.ResponseWriter, r *http.Request) 
 		button:active {
 			background: #004085;
 		}
+		.dashboard-link {
+			display: block;
+			margin-top: 15px;
+			text-align: center;
+			color: #007bff;
+			text-decoration: none;
+			font-size: 14px;
+		}
+		.dashboard-link:hover {
+			text-decoration: underline;
+		}
 		.error {
 			background: #f8d7da;
 			border: 1px solid #f5c6cb;
@@ -241,6 +252,7 @@ func (h *UploadHandler) HandleGetUpload(w http.ResponseWriter, r *http.Request) 
 			</div>
 			<button type="submit">Upload CSV</button>
 		</form>
+		<a href="/" class="dashboard-link">← Return to Dashboard</a>
 	</div>
 </body>
 </html>`
@@ -378,7 +390,12 @@ func (h *UploadHandler) HandleGetDashboard(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	expenses, err := h.expenses.GetAll(r.Context())
+	sortBy, sortDirection := dashboardSortPreference(r)
+	if r.URL.Query().Get("sort") != "" || r.URL.Query().Get("direction") != "" {
+		http.SetCookie(w, &http.Cookie{Name: "expense_sort", Value: sortBy + ":" + sortDirection, Path: "/", MaxAge: 60 * 60 * 24 * 365, HttpOnly: true, SameSite: http.SameSiteLaxMode})
+	}
+
+	expenses, err := h.expenses.GetByFilters(r.Context(), sortBy, sortDirection)
 	if err != nil {
 		h.logger.ErrorContext(r.Context(), "Failed to load expenses", slog.String("error", err.Error()))
 		h.renderUploadError(w, "Failed to load expenses from the database", nil)
@@ -396,10 +413,28 @@ func (h *UploadHandler) HandleGetDashboard(w http.ResponseWriter, r *http.Reques
 		categoryNames[int64(category.ID)] = category.DisplayName
 	}
 
-	h.renderDashboard(w, expenses, categoryNames)
+	h.renderDashboard(w, expenses, categoryNames, sortBy, sortDirection)
 }
 
-func (h *UploadHandler) renderDashboard(w http.ResponseWriter, expenses []models.Expense, categoryNames map[int64]string) {
+func dashboardSortPreference(r *http.Request) (string, string) {
+	sortBy := "date"
+	sortDirection := "desc"
+	if cookie, err := r.Cookie("expense_sort"); err == nil {
+		parts := strings.Split(cookie.Value, ":")
+		if len(parts) == 2 {
+			sortBy, sortDirection = parts[0], parts[1]
+		}
+	}
+	if value := r.URL.Query().Get("sort"); value != "" {
+		sortBy = value
+	}
+	if value := r.URL.Query().Get("direction"); value != "" {
+		sortDirection = value
+	}
+	return sortBy, sortDirection
+}
+
+func (h *UploadHandler) renderDashboard(w http.ResponseWriter, expenses []models.Expense, categoryNames map[int64]string, sortBy, sortDirection string) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 
@@ -427,6 +462,13 @@ func (h *UploadHandler) renderDashboard(w http.ResponseWriter, expenses []models
 		th, td { padding: 10px 12px; border-bottom: 1px solid #ddd; text-align: left; }
 		th { background: #f5f5f5; }
 		.table-scroll { overflow-x: auto; }
+		.sort-controls { display: flex; gap: 10px; align-items: end; margin: 20px 0; flex-wrap: wrap; }
+		.sort-controls label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+		.sort-controls select, .sort-controls button { padding: 7px 10px; }
+		.actions { display: flex; gap: 10px; margin: 20px 0; flex-wrap: wrap; }
+		.actions a { margin-top: 0; padding: 8px 12px; background: #007bff; color: white; text-decoration: none; border-radius: 4px; }
+		.actions a:hover { background: #0056b3; }
+		.active-sort { background: #e8f0fe; }
 		a { display: inline-block; margin-top: 20px; }
 	</style>
 </head>
@@ -434,16 +476,51 @@ func (h *UploadHandler) renderDashboard(w http.ResponseWriter, expenses []models
 	<div class="container">
 		<h1>Expense Dashboard</h1>
 		<p>%d expenses stored in the database.</p>
+		<div class="actions">
+			<a href="/upload">Upload another CSV</a>
+			<a href="/classification-log">Classification log</a>
+		</div>
+		<form class="sort-controls" method="get" action="/">
+			<label>Sort by
+				<select name="sort">
+					<option value="date"%s>Date</option>
+					<option value="amount"%s>Amount</option>
+					<option value="category"%s>Category</option>
+					<option value="description"%s>Description</option>
+				</select>
+			</label>
+			<label>Direction
+				<select name="direction">
+					<option value="asc"%s>Ascending</option>
+					<option value="desc"%s>Descending</option>
+				</select>
+			</label>
+			<button type="submit">Apply sort</button>
+		</form>
 		<div class="table-scroll">
 			<table>
-				<thead><tr><th>Date</th><th>Description</th><th>Amount</th><th>Balance</th><th>Category</th><th>Confidence</th></tr></thead>
+				<thead><tr><th class="%s">Date</th><th class="%s">Description</th><th class="%s">Amount</th><th>Balance</th><th class="%s">Category</th><th>Confidence</th></tr></thead>
 				<tbody>%s</tbody>
 			</table>
 		</div>
-		<a href="/upload">Upload another CSV</a>
 	</div>
 </body>
-</html>`, len(expenses), rows)
+</html>`, len(expenses), selectedOption(sortBy, "date"), selectedOption(sortBy, "amount"), selectedOption(sortBy, "category"), selectedOption(sortBy, "description"), selectedOption(sortDirection, "asc"), selectedOption(sortDirection, "desc"),
+		activeSortClass(sortBy, "date"), activeSortClass(sortBy, "description"), activeSortClass(sortBy, "amount"), activeSortClass(sortBy, "category"), rows)
+}
+
+func selectedOption(current, option string) string {
+	if current == option {
+		return " selected"
+	}
+	return ""
+}
+
+func activeSortClass(current, option string) string {
+	if current == option {
+		return "active-sort"
+	}
+	return ""
 }
 
 // HandleGetClassificationLog renders automatic classification decisions.
@@ -759,6 +836,11 @@ func (h *UploadHandler) renderUploadSuccess(w http.ResponseWriter, filename stri
 			</div>
 		</div>
 
+		<div class="actions">
+			<a href="/upload" class="btn-secondary">← Upload Another File</a>
+			<a href="/" class="btn-primary">Go to Dashboard →</a>
+		</div>
+
 		<h2 style="font-size: 18px; margin-bottom: 15px; color: #333;">Parsed Expenses Preview</h2>
 		<div class="table-scroll">
 			<table>
@@ -778,10 +860,6 @@ func (h *UploadHandler) renderUploadSuccess(w http.ResponseWriter, filename stri
 			</table>
 		</div>
 
-		<div class="actions">
-			<a href="/upload" class="btn-secondary">← Upload Another File</a>
-			<a href="/" class="btn-primary">Go to Dashboard →</a>
-		</div>
 	</div>
 </body>
 </html>`, html.EscapeString(filename), len(expenses), skippedRows, savedCount, tableRows)

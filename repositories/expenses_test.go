@@ -17,6 +17,12 @@ func newExpenseTestDB(t *testing.T) *sql.DB {
 		t.Fatalf("open database: %v", err)
 	}
 	_, err = db.Exec(`
+		CREATE TABLE categories (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			name TEXT UNIQUE NOT NULL,
+			display_name TEXT NOT NULL,
+			created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);
 		CREATE TABLE expenses (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			date DATE NOT NULL,
@@ -32,8 +38,50 @@ func newExpenseTestDB(t *testing.T) *sql.DB {
 		db.Close()
 		t.Fatalf("create expenses table: %v", err)
 	}
+	_, err = db.Exec(`INSERT INTO categories (name, display_name) VALUES ('casa', 'Casa'), ('ocio', 'Ocio')`)
+	if err != nil {
+		db.Close()
+		t.Fatalf("seed categories: %v", err)
+	}
 	t.Cleanup(func() { db.Close() })
 	return db
+}
+
+func TestExpenseRepositoryGetByFiltersSorting(t *testing.T) {
+	db := newExpenseTestDB(t)
+	repository := NewExpenseRepository(db)
+	baseDate := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
+	expenses := []models.Expense{
+		{Date: baseDate.AddDate(0, 0, 2), Description: "Zeta", Amount: 20, Balance: 1, CategoryID: 1, ImportedAt: baseDate},
+		{Date: baseDate.AddDate(0, 0, 1), Description: "Alpha", Amount: 5, Balance: 1, CategoryID: 2, ImportedAt: baseDate},
+		{Date: baseDate, Description: "Beta", Amount: 10, Balance: 1, CategoryID: 1, ImportedAt: baseDate},
+	}
+	if err := repository.CreateBatch(context.Background(), expenses); err != nil {
+		t.Fatalf("CreateBatch failed: %v", err)
+	}
+
+	tests := []struct {
+		name      string
+		sortBy    string
+		direction string
+		wantFirst string
+	}{
+		{"date ascending", "date", "asc", "Beta"},
+		{"amount descending", "amount", "desc", "Zeta"},
+		{"description ascending", "description", "asc", "Alpha"},
+		{"category ascending", "category", "asc", "Zeta"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			stored, err := repository.GetByFilters(context.Background(), test.sortBy, test.direction)
+			if err != nil {
+				t.Fatalf("GetByFilters failed: %v", err)
+			}
+			if stored[0].Description != test.wantFirst {
+				t.Errorf("expected first expense %q, got %q", test.wantFirst, stored[0].Description)
+			}
+		})
+	}
 }
 
 func TestExpenseRepositoryCreateAndGetAll(t *testing.T) {

@@ -173,3 +173,18 @@ func uploadRequest(t *testing.T, handler *UploadHandler, csv string) *httptest.R
 	handler.HandlePostUpload(response, request)
 	return response
 }
+
+func TestDashboardSortPreferenceUsesQueryAndCookie(t *testing.T) {
+	request := httptest.NewRequest(http.MethodGet, "/?sort=amount&direction=asc", nil)
+	sortBy, direction := dashboardSortPreference(request)
+	if sortBy != "amount" || direction != "asc" {
+		t.Fatalf("expected query sort preference amount/asc, got %s/%s", sortBy, direction)
+	}
+
+	request = httptest.NewRequest(http.MethodGet, "/", nil)
+	request.AddCookie(&http.Cookie{Name: "expense_sort", Value: "description:desc"})
+	sortBy, direction = dashboardSortPreference(request)
+	if sortBy != "description" || direction != "desc" {
+		t.Fatalf("expected cookie sort preference description/desc, got %s/%s", sortBy, direction)
+	}
+}

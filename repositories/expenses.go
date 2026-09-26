@@ -46,11 +46,35 @@ func (r *ExpenseRepository) CreateBatch(ctx context.Context, expenses []models.E
 
 // GetAll returns all expenses ordered from newest to oldest.
 func (r *ExpenseRepository) GetAll(ctx context.Context) ([]models.Expense, error) {
-	const query = `
-		SELECT id, date, description, amount, balance, COALESCE(category_id, 0),
-		       confidence_level, imported_at, corrected_at
-		FROM expenses
-		ORDER BY date DESC, id DESC`
+	return r.GetByFilters(ctx, "date", "desc")
+}
+
+// GetByFilters returns expenses sorted by a supported field and direction.
+func (r *ExpenseRepository) GetByFilters(ctx context.Context, sortBy, sortDirection string) ([]models.Expense, error) {
+	sortExpressions := map[string]string{
+		"date":        "e.date",
+		"amount":      "e.amount",
+		"description": "e.description COLLATE NOCASE",
+		"category":    "COALESCE(c.display_name, '') COLLATE NOCASE",
+	}
+	sortExpression, exists := sortExpressions[sortBy]
+	if !exists {
+		sortBy = "date"
+		sortExpression = sortExpressions[sortBy]
+	}
+	if sortDirection != "asc" && sortDirection != "desc" {
+		sortDirection = "desc"
+	}
+	fromClause := "expenses e"
+	if sortBy == "category" {
+		fromClause += " LEFT JOIN categories c ON c.id = e.category_id"
+	}
+
+	query := fmt.Sprintf(`
+		SELECT e.id, e.date, e.description, e.amount, e.balance, COALESCE(e.category_id, 0),
+		       e.confidence_level, e.imported_at, e.corrected_at
+		FROM %s
+		ORDER BY %s %s, e.date DESC, e.id DESC`, fromClause, sortExpression, sortDirection)
 
 	rows, err := r.db.QueryContext(ctx, query)
 	if err != nil {

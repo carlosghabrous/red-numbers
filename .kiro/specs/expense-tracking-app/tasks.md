@@ -191,43 +191,43 @@ This document organizes the expense tracking application implementation into 11 
 
 ### Tasks
 
-- [~] 4.1 Add sort UI controls to expense table
+- [x] 4.1 Add sort UI controls to expense table
   - Create sort dropdown/buttons (Date, Amount, Category, Description)
   - Create sort direction toggle (ascending/descending)
   - Add visual indicator showing current sort
   - _Requirements: 5.0, 14.0_
 
-- [~] 4.2 Implement ExpenseRepository.GetByFilters with sorting
+- [x] 4.2 Implement ExpenseRepository.GetByFilters with sorting
   - Add sortBy parameter (date, amount, category, description)
   - Add sortDirection parameter (asc, desc)
   - Implement sorting logic at repository level (SQL ORDER BY)
   - _Requirements: 5.0_
 
-- [~] 4.3 Update dashboard route to handle sort parameters
+- [x] 4.3 Update dashboard route to handle sort parameters
   - Accept sort parameters from query string or form
   - Pass to repository.GetByFilters()
   - Render table with sorted results
   - _Requirements: 5.0, 14.0_
 
-- [~] 4.4 Implement sort preference persistence via cookie
+- [x] 4.4 Implement sort preference persistence via cookie
   - Store selected sort field and direction in HTTP cookie
   - Load stored preference on page load
   - Update cookie when user changes sort
   - _Requirements: 5.0_
 
-- [~] 4.5 Add sort indicators and visual feedback
+- [x] 4.5 Add sort indicators and visual feedback
   - Show arrow or icon indicating sort direction
   - Highlight current sort column in table header
   - Provide clear visual feedback on sort change
   - _Requirements: 5.0, 14.0_
 
-- [ ]* 4.6 Write unit tests for sorting logic
+- [x] 4.6 Write unit tests for sorting logic
   - Test sort by date ascending/descending
   - Test sort by amount ascending/descending
   - Test sort by category with grouping
   - _Requirements: 5.0_
 
-- [ ]* 4.7 Write integration test for sort persistence
+- [x] 4.7 Write integration test for sort persistence
   - Load dashboard with sort preference cookie
   - Verify correct sort applied on load
   - Change sort, verify page reloads with new sort
