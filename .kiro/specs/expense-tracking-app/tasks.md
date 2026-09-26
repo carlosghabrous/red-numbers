@@ -375,20 +375,20 @@ This document organizes the expense tracking application implementation into 11 
 
 ### Tasks
 
-- [~] 7.1 Create expense detail page route and template
+- [x] 7.1 Create expense detail page route and template
   - Create GET /expenses/:id route
   - Query expense from database by ID
   - Render detail page with all expense information
   - _Requirements: 3.0, 14.0_
 
-- [~] 7.2 Add category correction UI to detail page
+- [x] 7.2 Add category correction UI to detail page
   - Display current category with label
   - Create dropdown with all 7 categories
   - Show current confidence level
   - Add "Save Changes" button
   - _Requirements: 3.0, 14.0_
 
-- [~] 7.3 Create POST handler to update expense category
+- [x] 7.3 Create POST handler to update expense category
   - Accept category ID from form submission
   - Validate category exists and is valid
   - Update expense in database
@@ -405,7 +405,7 @@ This document organizes the expense tracking application implementation into 11 
   - Add visual indicator that row is clickable (cursor change)
   - _Requirements: 3.0, 14.0_
 
-- [~] 7.6 Add navigation back to list from detail page
+- [x] 7.6 Add navigation back to list from detail page
   - Show "Back to List" link on detail page
   - Preserve scroll position if possible
   - _Requirements: 3.0, 14.0_
