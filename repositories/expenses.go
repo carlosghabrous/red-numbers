@@ -85,10 +85,29 @@ func (r *ExpenseRepository) BackfillFingerprints(ctx context.Context) error {
 	if err := rows.Err(); err != nil {
 		return err
 	}
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to begin fingerprint backfill: %w", err)
+	}
+	defer tx.Rollback()
 	for _, item := range records {
-		if _, err := r.db.ExecContext(ctx, `UPDATE expenses SET fingerprint = ? WHERE id = ?`, fingerprintForExpense(item.expense), item.id); err != nil {
+		if _, err := tx.ExecContext(ctx, `UPDATE expenses SET fingerprint = ? WHERE id = ?`, fingerprintForExpense(item.expense), item.id); err != nil {
 			return fmt.Errorf("failed to backfill expense fingerprint: %w", err)
 		}
+	}
+	if _, err := tx.ExecContext(ctx, `
+		DELETE FROM audit_log
+		WHERE expense_id IS NOT NULL
+		  AND expense_id NOT IN (SELECT MIN(id) FROM expenses GROUP BY fingerprint)`); err != nil {
+		return fmt.Errorf("failed to remove duplicate audit entries: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `
+		DELETE FROM expenses
+		WHERE id NOT IN (SELECT MIN(id) FROM expenses GROUP BY fingerprint)`); err != nil {
+		return fmt.Errorf("failed to remove duplicate expenses: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit fingerprint backfill: %w", err)
 	}
 	return nil
 }

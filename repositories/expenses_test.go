@@ -35,6 +35,15 @@ func newExpenseTestDB(t *testing.T) *sql.DB {
 			confidence_level TEXT DEFAULT 'low',
 			imported_at TIMESTAMP NOT NULL,
 			corrected_at TIMESTAMP
+		);
+		CREATE TABLE audit_log (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			action TEXT NOT NULL,
+			expense_id INTEGER,
+			old_value TEXT,
+			new_value TEXT,
+			details TEXT
 		)`)
 	if err != nil {
 		db.Close()
@@ -140,6 +149,77 @@ func TestExpenseRepositoryPagination(t *testing.T) {
 	count, err := repository.CountByFilterOptions(context.Background(), ExpenseFilterOptions{})
 	if err != nil || count != 3 {
 		t.Fatalf("expected total count 3, got %d (err=%v)", count, err)
+	}
+}
+
+func TestExpenseRepositorySkipsDuplicateRecords(t *testing.T) {
+	db := newExpenseTestDB(t)
+	repository := NewExpenseRepository(db)
+	expense := models.Expense{Date: time.Date(2026, 1, 5, 12, 0, 0, 0, time.UTC), Description: "Repeated", Amount: 12.50, Balance: 100, ImportedAt: time.Now()}
+	inserted, err := repository.CreateBatchWithCount(context.Background(), []models.Expense{expense})
+	if err != nil || inserted != 1 {
+		t.Fatalf("expected first insert, got count=%d err=%v", inserted, err)
+	}
+	duplicate := models.Expense{Date: expense.Date, Description: expense.Description, Amount: expense.Amount, Balance: expense.Balance, ImportedAt: time.Now()}
+	inserted, err = repository.CreateBatchWithCount(context.Background(), []models.Expense{duplicate})
+	if err != nil || inserted != 0 {
+		t.Fatalf("expected duplicate to be skipped, got count=%d err=%v", inserted, err)
+	}
+	count, err := repository.CountByFilterOptions(context.Background(), ExpenseFilterOptions{})
+	if err != nil || count != 1 {
+		t.Fatalf("expected one stored expense, got count=%d err=%v", count, err)
+	}
+}
+
+func TestExpenseRepositoryDateFilterNormalizesStoredTimestamps(t *testing.T) {
+	db := newExpenseTestDB(t)
+	repository := NewExpenseRepository(db)
+	expenses := []models.Expense{
+		{Date: time.Date(2026, 1, 31, 12, 0, 0, 0, time.UTC), Description: "January", Amount: 1, Balance: 1, ImportedAt: time.Now()},
+		{Date: time.Date(2026, 2, 1, 12, 0, 0, 0, time.UTC), Description: "February", Amount: 1, Balance: 1, ImportedAt: time.Now()},
+	}
+	if err := repository.CreateBatch(context.Background(), expenses); err != nil {
+		t.Fatalf("CreateBatch failed: %v", err)
+	}
+	start := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	end := time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC)
+	filtered, err := repository.GetByFilterOptions(context.Background(), ExpenseFilterOptions{StartDate: &start, EndDate: &end})
+	if err != nil || len(filtered) != 1 || filtered[0].Description != "January" {
+		t.Fatalf("expected January only, got %+v err=%v", filtered, err)
+	}
+}
+
+func TestExpenseRepositoryDeleteAll(t *testing.T) {
+	db := newExpenseTestDB(t)
+	repository := NewExpenseRepository(db)
+	expense := models.Expense{Date: time.Now(), Description: "To delete", Amount: 1, Balance: 1, ImportedAt: time.Now()}
+	if err := repository.Create(context.Background(), &expense); err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
+	if err := repository.DeleteAll(context.Background()); err != nil {
+		t.Fatalf("DeleteAll failed: %v", err)
+	}
+	count, err := repository.CountByFilterOptions(context.Background(), ExpenseFilterOptions{})
+	if err != nil || count != 0 {
+		t.Fatalf("expected empty database, got count=%d err=%v", count, err)
+	}
+}
+
+func TestExpenseRepositoryBackfillRemovesExistingDuplicates(t *testing.T) {
+	db := newExpenseTestDB(t)
+	date := time.Date(2026, 1, 5, 12, 0, 0, 0, time.UTC)
+	_, err := db.Exec(`INSERT INTO expenses (date, description, amount, balance, imported_at) VALUES (?, ?, ?, ?, ?), (?, ?, ?, ?, ?)`,
+		date, "Legacy duplicate", 5, 10, date, date, "Legacy duplicate", 5, 10, date)
+	if err != nil {
+		t.Fatalf("insert legacy duplicates: %v", err)
+	}
+	repository := NewExpenseRepository(db)
+	if err := repository.BackfillFingerprints(context.Background()); err != nil {
+		t.Fatalf("BackfillFingerprints failed: %v", err)
+	}
+	count, err := repository.CountByFilterOptions(context.Background(), ExpenseFilterOptions{})
+	if err != nil || count != 1 {
+		t.Fatalf("expected one deduplicated record, got count=%d err=%v", count, err)
 	}
 }
 
