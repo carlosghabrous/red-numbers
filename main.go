@@ -115,6 +115,8 @@ func main() {
 	mux.HandleFunc("GET /upload", uploadHandler.HandleGetUpload)
 	mux.HandleFunc("POST /upload", uploadHandler.HandlePostUpload)
 	mux.HandleFunc("GET /classification-log", uploadHandler.HandleGetClassificationLog)
+	mux.HandleFunc("GET /expenses/{id}", uploadHandler.HandleGetExpenseDetail)
+	mux.HandleFunc("POST /expenses/{id}", uploadHandler.HandlePostExpenseDetail)
 
 	// Create HTTP server with reasonable timeouts
 	server := &http.Server{

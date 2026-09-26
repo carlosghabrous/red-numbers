@@ -3,6 +3,7 @@ package repositories
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"testing"
 	"time"
 
@@ -115,6 +116,29 @@ func TestExpenseRepositoryGetByFilterOptions(t *testing.T) {
 	}
 	if len(filtered) != 2 {
 		t.Fatalf("expected 2 casa expenses, got %d", len(filtered))
+	}
+}
+
+func TestExpenseRepositoryPagination(t *testing.T) {
+	db := newExpenseTestDB(t)
+	repository := NewExpenseRepository(db)
+	baseDate := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
+	for index := 0; index < 3; index++ {
+		expense := models.Expense{Date: baseDate.AddDate(0, 0, index), Description: fmt.Sprintf("Expense %d", index), Amount: float64(index), Balance: 1, ImportedAt: baseDate}
+		if err := repository.Create(context.Background(), &expense); err != nil {
+			t.Fatalf("Create failed: %v", err)
+		}
+	}
+	page, err := repository.GetByFilterOptions(context.Background(), ExpenseFilterOptions{SortBy: "date", SortDirection: "asc", Limit: 2, Offset: 1})
+	if err != nil {
+		t.Fatalf("GetByFilterOptions failed: %v", err)
+	}
+	if len(page) != 2 || page[0].Description != "Expense 1" || page[1].Description != "Expense 2" {
+		t.Fatalf("unexpected page results: %+v", page)
+	}
+	count, err := repository.CountByFilterOptions(context.Background(), ExpenseFilterOptions{})
+	if err != nil || count != 3 {
+		t.Fatalf("expected total count 3, got %d (err=%v)", count, err)
 	}
 }
 

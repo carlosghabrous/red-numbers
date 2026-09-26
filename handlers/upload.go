@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -27,6 +28,8 @@ type UploadHandler struct {
 	expenses   *repositories.ExpenseRepository
 	categories *repositories.CategoryRepository
 }
+
+const dashboardPageSize = 50
 
 // NewUploadHandler creates a new upload handler
 func NewUploadHandler(logger *slog.Logger, db ...*sql.DB) *UploadHandler {
@@ -392,6 +395,11 @@ func (h *UploadHandler) HandleGetDashboard(w http.ResponseWriter, r *http.Reques
 	}
 
 	sortBy, sortDirection := dashboardSortPreference(r)
+	page, err := dashboardPage(r)
+	if err != nil {
+		h.renderUploadError(w, err.Error(), nil)
+		return
+	}
 	filterState, err := dashboardFilterStateFromRequest(r)
 	if err != nil {
 		h.renderUploadError(w, err.Error(), nil)
@@ -404,10 +412,18 @@ func (h *UploadHandler) HandleGetDashboard(w http.ResponseWriter, r *http.Reques
 
 	filterState.options.SortBy = sortBy
 	filterState.options.SortDirection = sortDirection
+	filterState.options.Limit = dashboardPageSize
+	filterState.options.Offset = (page - 1) * dashboardPageSize
 	expenses, err := h.expenses.GetByFilterOptions(r.Context(), filterState.options)
 	if err != nil {
 		h.logger.ErrorContext(r.Context(), "Failed to load expenses", slog.String("error", err.Error()))
 		h.renderUploadError(w, "Failed to load expenses from the database", nil)
+		return
+	}
+	totalExpenses, err := h.expenses.CountByFilterOptions(r.Context(), filterState.options)
+	if err != nil {
+		h.logger.ErrorContext(r.Context(), "Failed to count expenses", slog.String("error", err.Error()))
+		h.renderUploadError(w, "Failed to count expenses", nil)
 		return
 	}
 
@@ -422,7 +438,19 @@ func (h *UploadHandler) HandleGetDashboard(w http.ResponseWriter, r *http.Reques
 		categoryNames[int64(category.ID)] = category.DisplayName
 	}
 
-	h.renderDashboard(w, expenses, categoryNames, categories, sortBy, sortDirection, filterState)
+	h.renderDashboard(w, expenses, categoryNames, categories, sortBy, sortDirection, filterState, page, totalExpenses, r.URL.RawQuery)
+}
+
+func dashboardPage(r *http.Request) (int, error) {
+	value := r.URL.Query().Get("page")
+	if value == "" {
+		return 1, nil
+	}
+	page, err := strconv.Atoi(value)
+	if err != nil || page < 1 {
+		return 0, fmt.Errorf("invalid page number")
+	}
+	return page, nil
 }
 
 type dashboardFilterState struct {
@@ -541,7 +569,7 @@ func dashboardSortPreference(r *http.Request) (string, string) {
 	return sortBy, sortDirection
 }
 
-func (h *UploadHandler) renderDashboard(w http.ResponseWriter, expenses []models.Expense, categoryNames map[int64]string, categories []models.Category, sortBy, sortDirection string, filterState dashboardFilterState) {
+func (h *UploadHandler) renderDashboard(w http.ResponseWriter, expenses []models.Expense, categoryNames map[int64]string, categories []models.Category, sortBy, sortDirection string, filterState dashboardFilterState, page, totalExpenses int, listQuery string) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 
@@ -551,8 +579,12 @@ func (h *UploadHandler) renderDashboard(w http.ResponseWriter, expenses []models
 		if categoryName == "" {
 			categoryName = "Sin clasificar"
 		}
-		rows += fmt.Sprintf(`<tr><td>%s</td><td>%s</td><td>%.2f€</td><td>%.2f€</td><td>%s</td><td>%s</td></tr>`,
-			expense.Date.Format("02/01/2006"), html.EscapeString(expense.Description), expense.Amount, expense.Balance,
+		detailURL := "/expenses/" + strconv.FormatInt(expense.ID, 10)
+		if listQuery != "" {
+			detailURL += "?return=" + url.QueryEscape("/?"+listQuery)
+		}
+		rows += fmt.Sprintf(`<tr><td><a href="%s">%s</a></td><td><a href="%s">%s</a></td><td>%.2f€</td><td>%.2f€</td><td>%s</td><td>%s</td></tr>`,
+			html.EscapeString(detailURL), expense.Date.Format("02/01/2006"), html.EscapeString(detailURL), html.EscapeString(expense.Description), expense.Amount, expense.Balance,
 			html.EscapeString(categoryName), html.EscapeString(expense.ConfidenceLevel))
 	}
 
@@ -579,6 +611,9 @@ func (h *UploadHandler) renderDashboard(w http.ResponseWriter, expenses []models
 		.filter-controls { border: 1px solid #ddd; padding: 14px; margin: 12px 0 20px; }
 		.category-options { display: flex; gap: 12px; flex-wrap: wrap; margin: 8px 0; }
 		.filter-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+		.pagination { display: flex; gap: 8px; align-items: center; margin-top: 20px; flex-wrap: wrap; }
+		.pagination a { margin-top: 0; padding: 6px 10px; border: 1px solid #ccc; text-decoration: none; }
+		.pagination .current { font-weight: bold; background: #e8f0fe; padding: 6px 10px; }
 		a { display: inline-block; margin-top: 20px; }
 	</style>
 </head>
@@ -614,11 +649,13 @@ func (h *UploadHandler) renderDashboard(w http.ResponseWriter, expenses []models
 				<tbody>%s</tbody>
 			</table>
 		</div>
+		%s
 </div>
 </body>
 		</html>`, len(expenses), selectedOption(sortBy, "date"), selectedOption(sortBy, "amount"), selectedOption(sortBy, "category"), selectedOption(sortBy, "description"), selectedOption(sortDirection, "asc"), selectedOption(sortDirection, "desc"),
 		renderDashboardFilters(categories, filterState),
-		activeSortClass(sortBy, "date"), activeSortClass(sortBy, "description"), activeSortClass(sortBy, "amount"), activeSortClass(sortBy, "category"), rows)
+		activeSortClass(sortBy, "date"), activeSortClass(sortBy, "description"), activeSortClass(sortBy, "amount"), activeSortClass(sortBy, "category"), rows,
+		renderPagination(listQuery, page, totalExpenses))
 }
 
 func selectedOption(current, option string) string {
@@ -633,6 +670,129 @@ func activeSortClass(current, option string) string {
 		return "active-sort"
 	}
 	return ""
+}
+
+func renderPagination(listQuery string, page, totalExpenses int) string {
+	totalPages := (totalExpenses + dashboardPageSize - 1) / dashboardPageSize
+	if totalPages <= 1 {
+		return ""
+	}
+	query, _ := url.ParseQuery(listQuery)
+	query.Del("page")
+	link := func(targetPage int) string {
+		query.Set("page", strconv.Itoa(targetPage))
+		return "/?" + query.Encode()
+	}
+	markup := `<nav class="pagination" aria-label="Expense pages">`
+	if page > 1 {
+		markup += fmt.Sprintf(`<a href="%s">Previous</a>`, html.EscapeString(link(page-1)))
+	}
+	start := page - 2
+	if start < 1 {
+		start = 1
+	}
+	end := page + 2
+	if end > totalPages {
+		end = totalPages
+	}
+	for current := start; current <= end; current++ {
+		if current == page {
+			markup += fmt.Sprintf(`<span class="current">%d</span>`, current)
+		} else {
+			markup += fmt.Sprintf(`<a href="%s">%d</a>`, html.EscapeString(link(current)), current)
+		}
+	}
+	if page < totalPages {
+		markup += fmt.Sprintf(`<a href="%s">Next</a>`, html.EscapeString(link(page+1)))
+	}
+	return markup + "</nav>"
+}
+
+// HandleGetExpenseDetail renders one expense and its category correction form.
+func (h *UploadHandler) HandleGetExpenseDetail(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil || id <= 0 {
+		http.Error(w, "Invalid expense ID", http.StatusBadRequest)
+		return
+	}
+	expense, err := h.expenses.GetByID(r.Context(), id)
+	if err != nil {
+		h.logger.ErrorContext(r.Context(), "Failed to load expense", slog.String("error", err.Error()))
+		http.Error(w, "Failed to load expense", http.StatusInternalServerError)
+		return
+	}
+	if expense == nil {
+		http.NotFound(w, r)
+		return
+	}
+	categories, err := h.categories.GetAllCategories(r.Context())
+	if err != nil {
+		http.Error(w, "Failed to load categories", http.StatusInternalServerError)
+		return
+	}
+	returnURL := r.URL.Query().Get("return")
+	if returnURL == "" || !strings.HasPrefix(returnURL, "/") {
+		returnURL = "/"
+	}
+	h.renderExpenseDetail(w, expense, categories, returnURL, "")
+}
+
+// HandlePostExpenseDetail saves a corrected category.
+func (h *UploadHandler) HandlePostExpenseDetail(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil || id <= 0 {
+		http.Error(w, "Invalid expense ID", http.StatusBadRequest)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "Invalid form", http.StatusBadRequest)
+		return
+	}
+	categoryID, err := strconv.ParseInt(r.FormValue("category_id"), 10, 64)
+	if err != nil || categoryID <= 0 {
+		http.Error(w, "Invalid category", http.StatusBadRequest)
+		return
+	}
+	category, err := h.categories.GetByID(r.Context(), int(categoryID))
+	if err != nil {
+		http.Error(w, "Failed to validate category", http.StatusInternalServerError)
+		return
+	}
+	if category == nil {
+		http.Error(w, "Invalid category", http.StatusBadRequest)
+		return
+	}
+	if err := h.expenses.UpdateCategory(r.Context(), id, categoryID); err != nil {
+		h.logger.ErrorContext(r.Context(), "Failed to update expense category", slog.String("error", err.Error()))
+		http.Error(w, "Failed to update category", http.StatusInternalServerError)
+		return
+	}
+	returnURL := r.FormValue("return")
+	if returnURL == "" || !strings.HasPrefix(returnURL, "/") {
+		returnURL = "/"
+	}
+	http.Redirect(w, r, returnURL, http.StatusSeeOther)
+}
+
+func (h *UploadHandler) renderExpenseDetail(w http.ResponseWriter, expense *models.Expense, categories []models.Category, returnURL, message string) {
+	options := ""
+	for _, category := range categories {
+		selected := ""
+		if int64(category.ID) == expense.CategoryID {
+			selected = " selected"
+		}
+		options += fmt.Sprintf(`<option value="%d"%s>%s</option>`, category.ID, selected, html.EscapeString(category.DisplayName))
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	fmt.Fprintf(w, `<!DOCTYPE html>
+<html><head><title>Expense Detail</title><meta charset="UTF-8">
+<style>body{font-family:sans-serif;background:#f5f5f5;padding:20px}.container{max-width:620px;margin:auto;background:#fff;padding:32px}dt{font-weight:bold;margin-top:12px}dd{margin:4px 0}select,button{padding:8px;margin-top:8px}.actions{display:flex;gap:12px;margin-top:24px}.actions a{padding:8px 12px}</style>
+</head><body><div class="container"><h1>Expense Detail</h1>
+<dl><dt>Date</dt><dd>%s</dd><dt>Description</dt><dd>%s</dd><dt>Amount</dt><dd>%.2f€</dd><dt>Balance</dt><dd>%.2f€</dd><dt>Confidence</dt><dd>%s</dd></dl>
+<form method="post"><input type="hidden" name="return" value="%s"><label for="category_id">Category</label><br><select id="category_id" name="category_id">%s</select><br><button type="submit">Save Changes</button></form>
+<div class="actions"><a href="%s">Back to List</a></div></div></body></html>`,
+		expense.Date.Format("02/01/2006"), html.EscapeString(expense.Description), expense.Amount, expense.Balance,
+		html.EscapeString(expense.ConfidenceLevel), html.EscapeString(returnURL), options, html.EscapeString(returnURL))
 }
 
 func renderDashboardFilters(categories []models.Category, state dashboardFilterState) string {

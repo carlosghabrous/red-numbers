@@ -50,6 +50,58 @@ func (r *ExpenseRepository) GetAll(ctx context.Context) ([]models.Expense, error
 	return r.GetByFilters(ctx, "date", "desc")
 }
 
+// GetByID returns one expense by database ID.
+func (r *ExpenseRepository) GetByID(ctx context.Context, id int64) (*models.Expense, error) {
+	const query = `
+		SELECT id, date, description, amount, balance, COALESCE(category_id, 0),
+		       confidence_level, imported_at, corrected_at
+		FROM expenses WHERE id = ?`
+	var expense models.Expense
+	err := r.db.QueryRowContext(ctx, query, id).Scan(
+		&expense.ID, &expense.Date, &expense.Description, &expense.Amount, &expense.Balance,
+		&expense.CategoryID, &expense.ConfidenceLevel, &expense.ImportedAt, &expense.CorrectedAt,
+	)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get expense: %w", err)
+	}
+	return &expense, nil
+}
+
+// UpdateCategory changes an expense category and records the correction.
+func (r *ExpenseRepository) UpdateCategory(ctx context.Context, expenseID, categoryID int64) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to begin category update: %w", err)
+	}
+	defer tx.Rollback()
+
+	var oldCategory sql.NullInt64
+	if err := tx.QueryRowContext(ctx, `SELECT category_id FROM expenses WHERE id = ?`, expenseID).Scan(&oldCategory); err != nil {
+		return fmt.Errorf("failed to load current category: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE expenses SET category_id = ?, confidence_level = 'high', corrected_at = CURRENT_TIMESTAMP WHERE id = ?`, categoryID, expenseID); err != nil {
+		return fmt.Errorf("failed to update expense category: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO audit_log (action, expense_id, old_value, new_value, details) VALUES (?, ?, ?, ?, ?)`,
+		"category_correction", expenseID, nullableIntString(oldCategory), fmt.Sprint(categoryID), "manual category correction"); err != nil {
+		return fmt.Errorf("failed to log category correction: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit category update: %w", err)
+	}
+	return nil
+}
+
+func nullableIntString(value sql.NullInt64) string {
+	if !value.Valid {
+		return ""
+	}
+	return fmt.Sprint(value.Int64)
+}
+
 // GetByFilters returns expenses sorted by a supported field and direction.
 func (r *ExpenseRepository) GetByFilters(ctx context.Context, sortBy, sortDirection string) ([]models.Expense, error) {
 	return r.GetByFilterOptions(ctx, ExpenseFilterOptions{SortBy: sortBy, SortDirection: sortDirection})
@@ -62,6 +114,8 @@ type ExpenseFilterOptions struct {
 	CategoryIDs   []int64
 	StartDate     *time.Time
 	EndDate       *time.Time
+	Limit         int
+	Offset        int
 }
 
 // GetByFilterOptions returns expenses matching category/date filters and sorting.
@@ -109,14 +163,21 @@ func (r *ExpenseRepository) GetByFilterOptions(ctx context.Context, options Expe
 		whereClause = " WHERE " + strings.Join(conditions, " AND ")
 	}
 
+	limitClause := ""
+	argsForQuery := append([]any(nil), args...)
+	if options.Limit > 0 {
+		limitClause = " LIMIT ? OFFSET ?"
+		argsForQuery = append(argsForQuery, options.Limit, max(options.Offset, 0))
+	}
+
 	query := fmt.Sprintf(`
 		SELECT e.id, e.date, e.description, e.amount, e.balance, COALESCE(e.category_id, 0),
 		       e.confidence_level, e.imported_at, e.corrected_at
 		FROM %s
 		%s
-		ORDER BY %s %s, e.date DESC, e.id DESC`, fromClause, whereClause, sortExpression, sortDirection)
+		ORDER BY %s %s, e.date DESC, e.id DESC%s`, fromClause, whereClause, sortExpression, sortDirection, limitClause)
 
-	rows, err := r.db.QueryContext(ctx, query, args...)
+	rows, err := r.db.QueryContext(ctx, query, argsForQuery...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query expenses: %w", err)
 	}
@@ -144,6 +205,48 @@ func (r *ExpenseRepository) GetByFilterOptions(ctx context.Context, options Expe
 		return nil, fmt.Errorf("failed to iterate expenses: %w", err)
 	}
 	return expenses, nil
+}
+
+// CountByFilterOptions returns the number of expenses matching the filters.
+func (r *ExpenseRepository) CountByFilterOptions(ctx context.Context, options ExpenseFilterOptions) (int, error) {
+	fromClause := "expenses e"
+	if len(options.CategoryIDs) > 0 {
+		fromClause += ""
+	}
+	conditions := make([]string, 0, 2)
+	args := make([]any, 0, len(options.CategoryIDs)+2)
+	if len(options.CategoryIDs) > 0 {
+		placeholders := make([]string, len(options.CategoryIDs))
+		for index, categoryID := range options.CategoryIDs {
+			placeholders[index] = "?"
+			args = append(args, categoryID)
+		}
+		conditions = append(conditions, "e.category_id IN ("+strings.Join(placeholders, ",")+")")
+	}
+	if options.StartDate != nil {
+		conditions = append(conditions, "e.date >= ?")
+		args = append(args, options.StartDate.Format("2006-01-02"))
+	}
+	if options.EndDate != nil {
+		conditions = append(conditions, "e.date < ?")
+		args = append(args, options.EndDate.Format("2006-01-02"))
+	}
+	whereClause := ""
+	if len(conditions) > 0 {
+		whereClause = " WHERE " + strings.Join(conditions, " AND ")
+	}
+	var count int
+	if err := r.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+fromClause+whereClause, args...).Scan(&count); err != nil {
+		return 0, fmt.Errorf("failed to count expenses: %w", err)
+	}
+	return count, nil
+}
+
+func max(first, second int) int {
+	if first > second {
+		return first
+	}
+	return second
 }
 
 // LogClassification records an automatic classification decision in the audit log.
