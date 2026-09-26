@@ -1,0 +1,9 @@
+# sqlite
+expenses.db
+
+# executables
+main
+red-numbers
+
+# data files
+*.numbers
