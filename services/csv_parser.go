@@ -45,15 +45,16 @@ func (p *CSVParser) ParseCSVFile(filePath string) ([]models.Expense, error) {
 		return nil, fmt.Errorf("CSV file is empty")
 	}
 
-	// Validate headers
-	headerMap, err := p.validateHeaders(records[0])
+	// Find and validate the header row. Bank exports may contain metadata rows
+	// before the transaction table.
+	headerIdx, headerMap, err := p.findHeaderRow(records)
 	if err != nil {
 		return nil, err
 	}
 
 	// Parse data rows
 	expenses := make([]models.Expense, 0)
-	for rowIdx := 1; rowIdx < len(records); rowIdx++ {
+	for rowIdx := headerIdx + 1; rowIdx < len(records); rowIdx++ {
 		// This is a row
 		// [  05/01/2026 R/ EDUCARTE PROYECTOS FORMATIVOS SL 05/01/2026 -18,00 2.121,64                    ]
 
@@ -75,6 +76,19 @@ func (p *CSVParser) ParseCSVFile(filePath string) ([]models.Expense, error) {
 	}
 
 	return expenses, nil
+}
+
+func (p *CSVParser) findHeaderRow(records [][]string) (int, map[string]int, error) {
+	var lastErr error
+	for rowIdx, row := range records {
+		headerMap, err := p.validateHeaders(row)
+		if err == nil {
+			return rowIdx, headerMap, nil
+		}
+		lastErr = err
+	}
+
+	return 0, nil, lastErr
 }
 
 // validateHeaders checks that all required columns are present and returns a column index map

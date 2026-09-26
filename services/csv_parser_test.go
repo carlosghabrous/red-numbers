@@ -11,9 +11,9 @@ func TestParseValidCSVFile(t *testing.T) {
 	parser := NewCSVParser()
 
 	// Create a temporary CSV file with proper formatting
-	content := "fecha,concepto,importe,saldo\n" +
-		"01/01/2024,Mercadona Compra,45.50,1234.56\n" +
-		"02/01/2024,Farmacia Medica,65.00,1169.56\n"
+	content := "fecha de operación;concepto;fecha valor;importe;saldo\n" +
+		"01/01/2024;Mercadona Compra;01/01/2024;45.50;1234.56\n" +
+		"02/01/2024;Farmacia Medica;02/01/2024;65.00;1169.56\n"
 
 	tmpFile, err := os.CreateTemp("", "test*.csv")
 	if err != nil {
@@ -51,8 +51,8 @@ func TestParseCSVMissingRequiredColumns(t *testing.T) {
 	parser := NewCSVParser()
 
 	// Create CSV with missing 'importe' column
-	content := "fecha,concepto,saldo\n" +
-		"01/01/2024,Mercadona Compra,1234.56\n"
+	content := "fecha de operación;concepto;fecha valor;saldo\n" +
+		"01/01/2024;Mercadona Compra;01/01/2024;1234.56\n"
 
 	tmpFile, err := os.CreateTemp("", "test*.csv")
 	if err != nil {
@@ -78,8 +78,8 @@ func TestParseRowInvalidDate(t *testing.T) {
 	parser := NewCSVParser()
 
 	// Create CSV with invalid date format
-	content := "fecha,concepto,importe,saldo\n" +
-		"2024-01-01,Mercadona Compra,45.50,1234.56\n"
+	content := "fecha de operación;concepto;fecha valor;importe;saldo\n" +
+		"2024-01-01;Mercadona Compra;01/01/2024;45.50;1234.56\n"
 
 	tmpFile, err := os.CreateTemp("", "test*.csv")
 	if err != nil {
@@ -186,7 +186,7 @@ func TestParseAmountInvalid(t *testing.T) {
 func TestValidateHeadersCaseInsensitive(t *testing.T) {
 	parser := NewCSVParser()
 
-	headers := []string{"FECHA", "CONCEPTO", "IMPORTE", "SALDO"}
+	headers := []string{"FECHA DE OPERACIÓN", "CONCEPTO", "FECHA VALOR", "IMPORTE", "SALDO"}
 	headerMap, err := parser.validateHeaders(headers)
 	if err != nil {
 		t.Fatalf("validateHeaders failed: %v", err)
@@ -204,10 +204,10 @@ func TestParseCSVWithEmptyRows(t *testing.T) {
 	parser := NewCSVParser()
 
 	// Create CSV with empty rows
-	content := "fecha,concepto,importe,saldo\n" +
-		"01/01/2024,Mercadona Compra,45.50,1234.56\n" +
+	content := "fecha de operación;concepto;fecha valor;importe;saldo\n" +
+		"01/01/2024;Mercadona Compra;01/01/2024;45.50;1234.56\n" +
 		"\n" +
-		"02/01/2024,Farmacia Medica,65.00,1169.56\n"
+		"02/01/2024;Farmacia Medica;02/01/2024;65.00;1169.56\n"
 
 	tmpFile, err := os.CreateTemp("", "test*.csv")
 	if err != nil {
@@ -235,9 +235,9 @@ func TestParseCSVMissingRequiredField(t *testing.T) {
 	parser := NewCSVParser()
 
 	// Create CSV with missing fecha
-	content := "fecha,concepto,importe,saldo\n" +
-		",Mercadona Compra,45.50,1234.56\n" +
-		"02/01/2024,Farmacia Medica,65.00,1169.56\n"
+	content := "fecha de operación;concepto;fecha valor;importe;saldo\n" +
+		";Mercadona Compra;01/01/2024;45.50;1234.56\n" +
+		"02/01/2024;Farmacia Medica;02/01/2024;65.00;1169.56\n"
 
 	tmpFile, err := os.CreateTemp("", "test*.csv")
 	if err != nil {
@@ -270,8 +270,8 @@ func TestParseRowImportedAtTimestamp(t *testing.T) {
 	// Record time before parsing
 	beforeParse := time.Now()
 
-	content := "fecha,concepto,importe,saldo\n" +
-		"01/01/2024,Mercadona Compra,45.50,1234.56\n"
+	content := "fecha de operación;concepto;fecha valor;importe;saldo\n" +
+		"01/01/2024;Mercadona Compra;01/01/2024;45.50;1234.56\n"
 
 	tmpFile, err := os.CreateTemp("", "test*.csv")
 	if err != nil {
