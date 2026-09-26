@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"time"
 
 	"github.com/ghab/red-numbers/models"
 )
@@ -79,6 +80,58 @@ func (r *ExpenseRepository) GetAll(ctx context.Context) ([]models.Expense, error
 		return nil, fmt.Errorf("failed to iterate expenses: %w", err)
 	}
 	return expenses, nil
+}
+
+// LogClassification records an automatic classification decision in the audit log.
+func (r *ExpenseRepository) LogClassification(ctx context.Context, expense models.Expense, classification ClassificationLog) error {
+	const query = `
+		INSERT INTO audit_log (action, expense_id, new_value, details)
+		VALUES (?, ?, ?, ?)`
+	_, err := r.db.ExecContext(ctx, query, "classification", expense.ID, classification.CategoryName,
+		fmt.Sprintf("pattern=%s;confidence=%s", classification.Pattern, classification.Confidence))
+	return err
+}
+
+// ClassificationLog contains the audit fields for an automatic classification.
+type ClassificationLog struct {
+	CategoryName string
+	Pattern      string
+	Confidence   string
+}
+
+// ClassificationLogEntry represents one persisted classification decision.
+type ClassificationLogEntry struct {
+	Timestamp    time.Time
+	ExpenseID    int64
+	CategoryName string
+	Details      string
+}
+
+// GetClassificationLogs returns recent automatic classification decisions.
+func (r *ExpenseRepository) GetClassificationLogs(ctx context.Context) ([]ClassificationLogEntry, error) {
+	const query = `
+		SELECT timestamp, expense_id, new_value, details
+		FROM audit_log
+		WHERE action = ?
+		ORDER BY timestamp DESC, id DESC`
+	rows, err := r.db.QueryContext(ctx, query, "classification")
+	if err != nil {
+		return nil, fmt.Errorf("failed to query classification logs: %w", err)
+	}
+	defer rows.Close()
+
+	logs := make([]ClassificationLogEntry, 0)
+	for rows.Next() {
+		var entry ClassificationLogEntry
+		if err := rows.Scan(&entry.Timestamp, &entry.ExpenseID, &entry.CategoryName, &entry.Details); err != nil {
+			return nil, fmt.Errorf("failed to scan classification log: %w", err)
+		}
+		logs = append(logs, entry)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate classification logs: %w", err)
+	}
+	return logs, nil
 }
 
 type expenseWriter interface {

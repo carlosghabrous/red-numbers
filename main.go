@@ -114,6 +114,7 @@ func main() {
 	// Register upload routes
 	mux.HandleFunc("GET /upload", uploadHandler.HandleGetUpload)
 	mux.HandleFunc("POST /upload", uploadHandler.HandlePostUpload)
+	mux.HandleFunc("GET /classification-log", uploadHandler.HandleGetClassificationLog)
 
 	// Create HTTP server with reasonable timeouts
 	server := &http.Server{

@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"html"
@@ -19,19 +20,23 @@ import (
 
 // UploadHandler handles CSV file uploads
 type UploadHandler struct {
-	logger    *slog.Logger
-	csvParser *services.CSVParser
-	expenses  *repositories.ExpenseRepository
+	logger     *slog.Logger
+	csvParser  *services.CSVParser
+	classifier *services.FuzzyClassifierService
+	expenses   *repositories.ExpenseRepository
+	categories *repositories.CategoryRepository
 }
 
 // NewUploadHandler creates a new upload handler
 func NewUploadHandler(logger *slog.Logger, db ...*sql.DB) *UploadHandler {
 	handler := &UploadHandler{
-		logger:    logger,
-		csvParser: services.NewCSVParser(),
+		logger:     logger,
+		csvParser:  services.NewCSVParser(),
+		classifier: services.NewFuzzyClassifierService(),
 	}
 	if len(db) > 0 && db[0] != nil {
 		handler.expenses = repositories.NewExpenseRepository(db[0])
+		handler.categories = repositories.NewCategoryRepository(db[0])
 	}
 	return handler
 }
@@ -301,6 +306,12 @@ func (h *UploadHandler) HandlePostUpload(w http.ResponseWriter, r *http.Request)
 		os.Remove(tempFile)
 		return
 	}
+	classifications, err := h.classifyExpenses(r.Context(), expenses)
+	if err != nil {
+		h.logger.ErrorContext(r.Context(), "Expense classification failed", slog.String("error", err.Error()))
+		h.renderUploadError(w, "Failed to classify expenses", nil)
+		return
+	}
 
 	// Clean up temp file
 	defer os.Remove(tempFile)
@@ -314,10 +325,50 @@ func (h *UploadHandler) HandlePostUpload(w http.ResponseWriter, r *http.Request)
 			return
 		}
 		savedCount = len(expenses)
+		for index, classification := range classifications {
+			if err := h.expenses.LogClassification(r.Context(), expenses[index], repositories.ClassificationLog{
+				CategoryName: classification.CategoryName,
+				Pattern:      classification.Pattern,
+				Confidence:   classification.Confidence,
+			}); err != nil {
+				h.logger.WarnContext(r.Context(), "Failed to log classification", slog.String("error", err.Error()))
+			}
+		}
 	}
 
 	// Render success response with parsed expenses
-	h.renderUploadSuccess(w, header.Filename, expenses, skippedRows, savedCount)
+	h.renderUploadSuccess(w, header.Filename, expenses, classifications, skippedRows, savedCount)
+}
+
+func (h *UploadHandler) classifyExpenses(ctx context.Context, expenses []models.Expense) ([]services.Classification, error) {
+	classifications := make([]services.Classification, len(expenses))
+	if h.categories == nil {
+		for index := range expenses {
+			classifications[index] = h.classifier.Classify(expenses[index].Description)
+		}
+		return classifications, nil
+	}
+
+	categories, err := h.categories.GetAllCategories(ctx)
+	if err != nil {
+		return nil, err
+	}
+	categoryIDs := make(map[string]int64, len(categories))
+	for _, category := range categories {
+		categoryIDs[category.Name] = int64(category.ID)
+	}
+
+	for index := range expenses {
+		classification := h.classifier.Classify(expenses[index].Description)
+		categoryID, exists := categoryIDs[classification.CategoryName]
+		if !exists {
+			return nil, fmt.Errorf("category %q is not seeded", classification.CategoryName)
+		}
+		expenses[index].CategoryID = categoryID
+		expenses[index].ConfidenceLevel = classification.Confidence
+		classifications[index] = classification
+	}
+	return classifications, nil
 }
 
 // HandleGetDashboard renders all expenses stored in SQLite.
@@ -334,17 +385,33 @@ func (h *UploadHandler) HandleGetDashboard(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	h.renderDashboard(w, expenses)
+	categories, err := h.categories.GetAllCategories(r.Context())
+	if err != nil {
+		h.logger.ErrorContext(r.Context(), "Failed to load categories", slog.String("error", err.Error()))
+		h.renderUploadError(w, "Failed to load categories from the database", nil)
+		return
+	}
+	categoryNames := make(map[int64]string, len(categories))
+	for _, category := range categories {
+		categoryNames[int64(category.ID)] = category.DisplayName
+	}
+
+	h.renderDashboard(w, expenses, categoryNames)
 }
 
-func (h *UploadHandler) renderDashboard(w http.ResponseWriter, expenses []models.Expense) {
+func (h *UploadHandler) renderDashboard(w http.ResponseWriter, expenses []models.Expense, categoryNames map[int64]string) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 
 	rows := ""
 	for _, expense := range expenses {
-		rows += fmt.Sprintf(`<tr><td>%s</td><td>%s</td><td>%.2f€</td><td>%.2f€</td></tr>`,
-			expense.Date.Format("02/01/2006"), html.EscapeString(expense.Description), expense.Amount, expense.Balance)
+		categoryName := categoryNames[expense.CategoryID]
+		if categoryName == "" {
+			categoryName = "Sin clasificar"
+		}
+		rows += fmt.Sprintf(`<tr><td>%s</td><td>%s</td><td>%.2f€</td><td>%.2f€</td><td>%s</td><td>%s</td></tr>`,
+			expense.Date.Format("02/01/2006"), html.EscapeString(expense.Description), expense.Amount, expense.Balance,
+			html.EscapeString(categoryName), html.EscapeString(expense.ConfidenceLevel))
 	}
 
 	fmt.Fprintf(w, `<!DOCTYPE html>
@@ -369,7 +436,7 @@ func (h *UploadHandler) renderDashboard(w http.ResponseWriter, expenses []models
 		<p>%d expenses stored in the database.</p>
 		<div class="table-scroll">
 			<table>
-				<thead><tr><th>Date</th><th>Description</th><th>Amount</th><th>Balance</th></tr></thead>
+				<thead><tr><th>Date</th><th>Description</th><th>Amount</th><th>Balance</th><th>Category</th><th>Confidence</th></tr></thead>
 				<tbody>%s</tbody>
 			</table>
 		</div>
@@ -377,6 +444,36 @@ func (h *UploadHandler) renderDashboard(w http.ResponseWriter, expenses []models
 	</div>
 </body>
 </html>`, len(expenses), rows)
+}
+
+// HandleGetClassificationLog renders automatic classification decisions.
+func (h *UploadHandler) HandleGetClassificationLog(w http.ResponseWriter, r *http.Request) {
+	if h.expenses == nil {
+		h.renderUploadError(w, "Database is not configured", nil)
+		return
+	}
+
+	logs, err := h.expenses.GetClassificationLogs(r.Context())
+	if err != nil {
+		h.logger.ErrorContext(r.Context(), "Failed to load classification logs", slog.String("error", err.Error()))
+		h.renderUploadError(w, "Failed to load classification logs", nil)
+		return
+	}
+
+	rows := ""
+	for _, entry := range logs {
+		rows += fmt.Sprintf(`<tr><td>%s</td><td>%d</td><td>%s</td><td>%s</td></tr>`,
+			entry.Timestamp.Format(time.RFC3339), entry.ExpenseID, html.EscapeString(entry.CategoryName), html.EscapeString(entry.Details))
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	fmt.Fprintf(w, `<!DOCTYPE html>
+<html><head><title>Classification Log</title><meta charset="UTF-8"></head>
+<body><h1>Classification Log</h1>
+<table><thead><tr><th>Timestamp</th><th>Expense</th><th>Category</th><th>Details</th></tr></thead>
+<tbody>%s</tbody></table><p><a href="/">Back to dashboard</a></p>
+</body></html>`, rows)
 }
 
 // renderUploadError renders an error page for upload failures
@@ -483,20 +580,29 @@ func (h *UploadHandler) renderUploadError(w http.ResponseWriter, errMsg string, 
 }
 
 // renderUploadSuccess renders a success page with parsed expenses
-func (h *UploadHandler) renderUploadSuccess(w http.ResponseWriter, filename string, expenses []models.Expense, skippedRows int, savedCount int) {
+func (h *UploadHandler) renderUploadSuccess(w http.ResponseWriter, filename string, expenses []models.Expense, classifications []services.Classification, skippedRows int, savedCount int) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 
 	// Build table rows
 	tableRows := ""
-	for _, expense := range expenses {
+	for index, expense := range expenses {
+		category := "Sin clasificar"
+		confidence := expense.ConfidenceLevel
+		if index < len(classifications) {
+			category = classifications[index].CategoryName
+			confidence = classifications[index].Confidence
+		}
 		tableRows += fmt.Sprintf(`
 		<tr>
 			<td>%s</td>
 			<td>%s</td>
 			<td>%.2f€</td>
 			<td>%.2f€</td>
-		</tr>`, expense.Date.Format("02/01/2006"), html.EscapeString(expense.Description), expense.Amount, expense.Balance)
+			<td>%s</td>
+			<td>%s</td>
+		</tr>`, expense.Date.Format("02/01/2006"), html.EscapeString(expense.Description), expense.Amount, expense.Balance,
+			html.EscapeString(category), html.EscapeString(confidence))
 	}
 
 	html := fmt.Sprintf(`<!DOCTYPE html>
@@ -662,6 +768,8 @@ func (h *UploadHandler) renderUploadSuccess(w http.ResponseWriter, filename stri
 						<th>Description</th>
 						<th>Amount</th>
 						<th class="text-right">Balance</th>
+						<th>Category</th>
+						<th>Confidence</th>
 					</tr>
 				</thead>
 				<tbody>

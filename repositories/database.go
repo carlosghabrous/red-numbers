@@ -12,10 +12,10 @@ import (
 
 // DatabaseConfig holds database connection configuration
 type DatabaseConfig struct {
-	DBPath              string
-	MaxOpenConnections  int
-	MaxIdleConnections  int
-	ConnMaxLifetime     time.Duration
+	DBPath             string
+	MaxOpenConnections int
+	MaxIdleConnections int
+	ConnMaxLifetime    time.Duration
 }
 
 // InitializeDatabase creates a new SQLite database connection, applies migrations, and returns the connection
@@ -58,6 +58,11 @@ func InitializeDatabase(ctx context.Context, config DatabaseConfig, logger *slog
 	migrationManager := NewMigrationManager(db, logger)
 	if err := migrationManager.ApplyMigrations(ctx); err != nil {
 		logger.Error("failed to apply migrations", "error", err)
+		db.Close()
+		return nil, err
+	}
+	if err := SeedDefaultCategories(ctx, db); err != nil {
+		logger.Error("failed to seed default categories", "error", err)
 		db.Close()
 		return nil, err
 	}

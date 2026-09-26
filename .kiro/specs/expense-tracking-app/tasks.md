@@ -128,7 +128,7 @@ This document organizes the expense tracking application implementation into 11 
 
 ### Tasks
 
-- [~] 3.1 Define classification keyword patterns
+- [x] 3.1 Define classification keyword patterns
   - Create keyword mapping for all 7 categories
   - supermercado: "mercadona", "consum", "carrefour", "aldi", etc.
   - medico: "farmacia", "clinica", "dental", etc.
@@ -139,31 +139,31 @@ This document organizes the expense tracking application implementation into 11 
   - casa: "alquiler", "renta", "volkswagen renting", etc.
   - _Requirements: 2.0_
 
-- [~] 3.2 Implement FuzzyClassifierService with keyword matching
+- [x] 3.2 Implement FuzzyClassifierService with keyword matching
   - Create case-insensitive substring matching algorithm
   - Assign confidence based on match strength (exact, partial, keyword)
   - Implement priority resolution when multiple patterns match
   - _Requirements: 2.0_
 
-- [~] 3.3 Integrate classifier into CSV import flow
+- [x] 3.3 Integrate classifier into CSV import flow
   - Call FuzzyClassifierService for each parsed expense
   - Store category_id and confidence_level in database
   - Log classification decisions with description, pattern matched, confidence
   - _Requirements: 2.0_
 
-- [~] 3.4 Update dashboard to display classification results
+- [x] 3.4 Update dashboard to display classification results
   - Add category column to expense table
   - Display confidence level (high, medium, low) as visual indicator or text
   - Sort by confidence to highlight uncertain classifications
   - _Requirements: 2.0, 14.0_
 
-- [~] 3.5 Create classification logging system
+- [x] 3.5 Create classification logging system
   - Log each classification decision with timestamp, description, category, confidence
   - Store logs in database or file for debugging
   - Provide log viewer endpoint for admin
   - _Requirements: 2.0_
 
-- [ ]* 3.6 Write unit tests for FuzzyClassifierService
+- [x] 3.6 Write unit tests for FuzzyClassifierService
   - Test exact keyword matches
   - Test partial matches with confidence scoring
   - Test priority resolution for conflicting patterns
@@ -171,7 +171,7 @@ This document organizes the expense tracking application implementation into 11 
   - Test default category assignment for no matches
   - _Requirements: 2.0_
 
-- [ ]* 3.7 Write integration test for classification on import
+- [x] 3.7 Write integration test for classification on import
   - Upload CSV with mixed expense descriptions
   - Verify each expense assigned to correct category
   - Verify confidence levels assigned

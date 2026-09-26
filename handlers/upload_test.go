@@ -68,6 +68,12 @@ func TestUploadEndpoint(t *testing.T) {
 			if !bytes.Contains(response.Body.Bytes(), []byte(test.expectedText)) {
 				t.Errorf("Expected response to contain %q", test.expectedText)
 			}
+			if test.expectedStatus == http.StatusOK {
+				if !bytes.Contains(response.Body.Bytes(), []byte("Category")) ||
+					!bytes.Contains(response.Body.Bytes(), []byte("Confidence")) {
+					t.Error("Expected upload preview to show category and confidence columns")
+				}
+			}
 		})
 	}
 }
@@ -88,7 +94,30 @@ func TestUploadPersistsExpensesAcrossDatabaseReopen(t *testing.T) {
 		confidence_level TEXT DEFAULT 'low',
 		imported_at TIMESTAMP NOT NULL,
 		corrected_at TIMESTAMP
-	)`)
+	);
+	CREATE TABLE categories (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		name TEXT UNIQUE NOT NULL,
+		display_name TEXT NOT NULL,
+		created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+	);
+	CREATE TABLE audit_log (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		action TEXT NOT NULL,
+		expense_id INTEGER,
+		new_value TEXT,
+		details TEXT
+	);
+	INSERT INTO categories (name, display_name) VALUES
+		('supermercado', 'Supermercado'),
+		('medico', 'Médico'),
+		('niños', 'Niños'),
+		('ocio', 'Ocio'),
+		('deporte', 'Deporte'),
+		('suministros', 'Suministros'),
+		('casa', 'Casa');
+	`)
 	if err != nil {
 		db.Close()
 		t.Fatalf("create expenses table: %v", err)
