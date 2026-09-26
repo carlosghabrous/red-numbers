@@ -30,6 +30,7 @@ func newExpenseTestDB(t *testing.T) *sql.DB {
 			description TEXT NOT NULL CHECK (description <> ''),
 			amount REAL NOT NULL,
 			balance REAL NOT NULL,
+			fingerprint TEXT,
 			category_id INTEGER,
 			confidence_level TEXT DEFAULT 'low',
 			imported_at TIMESTAMP NOT NULL,
