@@ -25,35 +25,43 @@ var RequiredColumns = []string{"fecha de operación", "concepto", "fecha valor",
 // ParseCSVFile parses a CSV file and returns Expense objects
 // It validates headers and skips invalid rows, collecting errors for reporting
 func (p *CSVParser) ParseCSVFile(filePath string) ([]models.Expense, error) {
+	expenses, _, err := p.ParseCSVFileWithStats(filePath)
+	return expenses, err
+}
+
+// ParseCSVFileWithStats parses a CSV file and reports rows skipped during parsing.
+func (p *CSVParser) ParseCSVFileWithStats(filePath string) ([]models.Expense, int, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open CSV file: %w", err)
+		return nil, 0, fmt.Errorf("failed to open CSV file: %w", err)
 	}
 	defer file.Close()
 
 	reader := csv.NewReader(file)
 	reader.Comma = ';'
 	reader.Comment = '#'
+	reader.FieldsPerRecord = -1
 
 	// Read all records
 	records, err := reader.ReadAll()
 	if err != nil {
-		return nil, fmt.Errorf("failed to read CSV file: %w", err)
+		return nil, 0, fmt.Errorf("failed to read CSV file: %w", err)
 	}
 
 	if len(records) == 0 {
-		return nil, fmt.Errorf("CSV file is empty")
+		return nil, 0, fmt.Errorf("CSV file is empty")
 	}
 
 	// Find and validate the header row. Bank exports may contain metadata rows
 	// before the transaction table.
 	headerIdx, headerMap, err := p.findHeaderRow(records)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	// Parse data rows
 	expenses := make([]models.Expense, 0)
+	skippedRows := 0
 	for rowIdx := headerIdx + 1; rowIdx < len(records); rowIdx++ {
 		// This is a row
 		// [  05/01/2026 R/ EDUCARTE PROYECTOS FORMATIVOS SL 05/01/2026 -18,00 2.121,64                    ]
@@ -69,13 +77,14 @@ func (p *CSVParser) ParseCSVFile(filePath string) ([]models.Expense, error) {
 		if err != nil {
 			// Log error but continue parsing other rows
 			fmt.Printf("Warning: Skipping row %d: %v\n", rowIdx+1, err)
+			skippedRows++
 			continue
 		}
 
 		expenses = append(expenses, *expense)
 	}
 
-	return expenses, nil
+	return expenses, skippedRows, nil
 }
 
 func (p *CSVParser) findHeaderRow(records [][]string) (int, map[string]int, error) {

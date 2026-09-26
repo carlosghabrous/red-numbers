@@ -317,6 +317,45 @@ func TestParseCSVEmptyFile(t *testing.T) {
 	}
 }
 
+func TestParseCSVFindsHeaderAfterMetadataRows(t *testing.T) {
+	parser := NewCSVParser()
+	content := "# Account metadata\n" +
+		";;Account holder;Example;;;;;;;;;;;;;;;;\n" +
+		";;FECHA DE OPERACIÓN;CONCEPTO;FECHA VALOR;IMPORTE;SALDO;;;;;;;;;;;;;;;;\n" +
+		";;05/01/2026;R/ EDUCARTE PROYECTOS FORMATIVOS SL;05/01/2026;-18,00;2.121,64;;;;;;;;;;;;;;;;\n"
+
+	tmpFile, err := os.CreateTemp("", "test*.csv")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer os.Remove(tmpFile.Name())
+
+	if _, err := tmpFile.WriteString(content); err != nil {
+		t.Fatalf("Failed to write temp file: %v", err)
+	}
+	if err := tmpFile.Close(); err != nil {
+		t.Fatalf("Failed to close temp file: %v", err)
+	}
+
+	expenses, err := parser.ParseCSVFile(tmpFile.Name())
+	if err != nil {
+		t.Fatalf("ParseCSVFile failed: %v", err)
+	}
+
+	if len(expenses) != 1 {
+		t.Fatalf("Expected 1 expense, got %d", len(expenses))
+	}
+	if expenses[0].Description != "R/ EDUCARTE PROYECTOS FORMATIVOS SL" {
+		t.Errorf("Unexpected description: %q", expenses[0].Description)
+	}
+	if expenses[0].Amount != -18.00 {
+		t.Errorf("Expected amount -18.00, got %.2f", expenses[0].Amount)
+	}
+	if expenses[0].Balance != 2121.64 {
+		t.Errorf("Expected balance 2121.64, got %.2f", expenses[0].Balance)
+	}
+}
+
 func TestParseAmountEdgeCases(t *testing.T) {
 	parser := NewCSVParser()
 

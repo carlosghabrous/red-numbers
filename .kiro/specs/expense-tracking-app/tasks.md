@@ -12,7 +12,7 @@ This document organizes the expense tracking application implementation into 11 
 
 **Success Criteria:**
 - User can upload a CSV file via HTTP form
-- System validates required columns (fecha, concepto, importe, saldo)
+- System validates required columns (fecha de operación, concepto, fecha valor, importe, saldo)
 - Parsed expenses display in HTML table with date, description, amount
 - Clear error message if columns are missing
 - Estimated effort: 3-4 hours
@@ -27,7 +27,7 @@ This document organizes the expense tracking application implementation into 11 
 
 - [x] 1.2 Implement CSV parser with header validation
   - Parse CSV headers from first row
-  - Validate required columns: fecha, concepto, importe, saldo
+  - Validate required columns: fecha de operación, concepto, fecha valor, importe, saldo
   - Return descriptive error if columns missing
   - Create in-memory Expense objects from valid rows
   - _Requirements: 1.0, 13.0_
@@ -51,7 +51,7 @@ This document organizes the expense tracking application implementation into 11 
   - Test decimal separator handling (comma and period)
   - _Requirements: 1.0, 13.0_
 
-- [ ]* 1.6 Write integration test for upload endpoint
+- [x] 1.6 Write integration test for upload endpoint
   - Upload valid CSV file via POST
   - Verify HTTP 200 response with parsed data
   - Verify error response for invalid CSV

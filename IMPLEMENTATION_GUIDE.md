@@ -63,7 +63,7 @@ Auto-update when corrections made + full styling + tests
 ### Prerequisites
 - Go 1.22+
 - SQLite 3
-- A bank export CSV file (format: fecha, concepto, importe, saldo)
+- A bank export CSV file (semicolon-delimited, with fecha de operación, concepto, fecha valor, importe, and saldo columns)
 
 ### Setup
 ```bash
@@ -99,7 +99,7 @@ Start with **Slice 1: CSV Upload and Raw Display**
 
 This slice requires:
 1. **CSV upload endpoint** - GET /upload serves form, POST /upload handles file
-2. **CSV parser** - Extract fecha, concepto, importe, saldo
+2. **CSV parser** - Find the required header row, then extract fecha de operación, concepto, fecha valor, importe, and saldo
 3. **HTML table** - Display parsed expenses in a web page
 4. **Basic styling** - Make it readable
 

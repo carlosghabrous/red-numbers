@@ -286,7 +286,7 @@ func (h *UploadHandler) HandlePostUpload(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Parse CSV file
-	expenses, err := h.csvParser.ParseCSVFile(tempFile)
+	expenses, skippedRows, err := h.csvParser.ParseCSVFileWithStats(tempFile)
 	if err != nil {
 		h.logger.WarnContext(r.Context(), "CSV parsing failed", slog.String("error", err.Error()))
 		h.renderUploadError(w, err.Error(), nil)
@@ -301,7 +301,7 @@ func (h *UploadHandler) HandlePostUpload(w http.ResponseWriter, r *http.Request)
 	h.logger.InfoContext(r.Context(), "CSV parsed successfully", slog.Int("expense_count", len(expenses)))
 
 	// Render success response with parsed expenses
-	h.renderUploadSuccess(w, header.Filename, expenses)
+	h.renderUploadSuccess(w, header.Filename, expenses, skippedRows)
 }
 
 // renderUploadError renders an error page for upload failures
@@ -408,7 +408,7 @@ func (h *UploadHandler) renderUploadError(w http.ResponseWriter, errMsg string, 
 }
 
 // renderUploadSuccess renders a success page with parsed expenses
-func (h *UploadHandler) renderUploadSuccess(w http.ResponseWriter, filename string, expenses []models.Expense) {
+func (h *UploadHandler) renderUploadSuccess(w http.ResponseWriter, filename string, expenses []models.Expense, skippedRows int) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 
@@ -568,6 +568,10 @@ func (h *UploadHandler) renderUploadSuccess(w http.ResponseWriter, filename stri
 				<span class="summary-label">Expenses parsed:</span>
 				<span class="summary-value">%d</span>
 			</div>
+			<div class="summary-row">
+				<span class="summary-label">Rows skipped:</span>
+				<span class="summary-value">%d</span>
+			</div>
 		</div>
 
 		<h2 style="font-size: 18px; margin-bottom: 15px; color: #333;">Parsed Expenses Preview</h2>
@@ -593,7 +597,7 @@ func (h *UploadHandler) renderUploadSuccess(w http.ResponseWriter, filename stri
 		</div>
 	</div>
 </body>
-</html>`, html.EscapeString(filename), len(expenses), tableRows)
+</html>`, html.EscapeString(filename), len(expenses), skippedRows, tableRows)
 
 	fmt.Fprint(w, html)
 }
