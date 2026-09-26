@@ -14,9 +14,9 @@ import (
 
 // MigrationManager handles database schema versioning and migration execution
 type MigrationManager struct {
-	db               *sql.DB
-	logger           *slog.Logger
-	migrationsPath   string
+	db             *sql.DB
+	logger         *slog.Logger
+	migrationsPath string
 }
 
 // Migration represents a single database schema migration
@@ -28,9 +28,9 @@ type Migration struct {
 // NewMigrationManager creates a new migration manager
 func NewMigrationManager(db *sql.DB, logger *slog.Logger) *MigrationManager {
 	return &MigrationManager{
-		db:               db,
-		logger:           logger,
-		migrationsPath:   "migrations", // relative path from where app runs
+		db:             db,
+		logger:         logger,
+		migrationsPath: "migrations", // relative path from where app runs
 	}
 }
 

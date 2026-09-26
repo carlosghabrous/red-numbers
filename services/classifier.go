@@ -82,7 +82,6 @@ func matchScore(description, keyword string) (float64, string) {
 	return 0, "low"
 }
 
-
 func containsWord(description, keyword string) bool {
 	words := strings.FieldsFunc(description, func(r rune) bool {
 		return r < 'a' || r > 'z'

@@ -212,12 +212,12 @@ func (sv *SchemaVerifier) VerifyIndexesForPerformance() (map[string]string, erro
 	sv.logger.Info("Starting performance verification with EXPLAIN QUERY PLAN")
 
 	testQueries := map[string]string{
-		"date_filter":           "SELECT * FROM expenses WHERE date BETWEEN '2024-01-01' AND '2024-12-31'",
-		"category_filter":       "SELECT * FROM expenses WHERE category_id = 1",
-		"date_category_filter":  "SELECT * FROM expenses WHERE date BETWEEN '2024-01-01' AND '2024-12-31' AND category_id = 1",
-		"confidence_filter":     "SELECT * FROM expenses WHERE confidence_level = 'high'",
-		"priority_sort":         "SELECT * FROM classification_rules ORDER BY priority ASC",
-		"audit_timestamp_sort":  "SELECT * FROM audit_log ORDER BY timestamp DESC",
+		"date_filter":          "SELECT * FROM expenses WHERE date BETWEEN '2024-01-01' AND '2024-12-31'",
+		"category_filter":      "SELECT * FROM expenses WHERE category_id = 1",
+		"date_category_filter": "SELECT * FROM expenses WHERE date BETWEEN '2024-01-01' AND '2024-12-31' AND category_id = 1",
+		"confidence_filter":    "SELECT * FROM expenses WHERE confidence_level = 'high'",
+		"priority_sort":        "SELECT * FROM classification_rules ORDER BY priority ASC",
+		"audit_timestamp_sort": "SELECT * FROM audit_log ORDER BY timestamp DESC",
 	}
 
 	results := make(map[string]string)
