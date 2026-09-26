@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/ghab/red-numbers/models"
@@ -51,6 +52,22 @@ func (r *ExpenseRepository) GetAll(ctx context.Context) ([]models.Expense, error
 
 // GetByFilters returns expenses sorted by a supported field and direction.
 func (r *ExpenseRepository) GetByFilters(ctx context.Context, sortBy, sortDirection string) ([]models.Expense, error) {
+	return r.GetByFilterOptions(ctx, ExpenseFilterOptions{SortBy: sortBy, SortDirection: sortDirection})
+}
+
+// ExpenseFilterOptions contains the dashboard sorting and filtering options.
+type ExpenseFilterOptions struct {
+	SortBy        string
+	SortDirection string
+	CategoryIDs   []int64
+	StartDate     *time.Time
+	EndDate       *time.Time
+}
+
+// GetByFilterOptions returns expenses matching category/date filters and sorting.
+func (r *ExpenseRepository) GetByFilterOptions(ctx context.Context, options ExpenseFilterOptions) ([]models.Expense, error) {
+	sortBy := options.SortBy
+	sortDirection := options.SortDirection
 	sortExpressions := map[string]string{
 		"date":        "e.date",
 		"amount":      "e.amount",
@@ -69,14 +86,37 @@ func (r *ExpenseRepository) GetByFilters(ctx context.Context, sortBy, sortDirect
 	if sortBy == "category" {
 		fromClause += " LEFT JOIN categories c ON c.id = e.category_id"
 	}
+	conditions := make([]string, 0, 2)
+	args := make([]any, 0, len(options.CategoryIDs)+2)
+	if len(options.CategoryIDs) > 0 {
+		placeholders := make([]string, len(options.CategoryIDs))
+		for index, categoryID := range options.CategoryIDs {
+			placeholders[index] = "?"
+			args = append(args, categoryID)
+		}
+		conditions = append(conditions, "e.category_id IN ("+strings.Join(placeholders, ",")+")")
+	}
+	if options.StartDate != nil {
+		conditions = append(conditions, "e.date >= ?")
+		args = append(args, options.StartDate.Format("2006-01-02"))
+	}
+	if options.EndDate != nil {
+		conditions = append(conditions, "e.date < ?")
+		args = append(args, options.EndDate.Format("2006-01-02"))
+	}
+	whereClause := ""
+	if len(conditions) > 0 {
+		whereClause = " WHERE " + strings.Join(conditions, " AND ")
+	}
 
 	query := fmt.Sprintf(`
 		SELECT e.id, e.date, e.description, e.amount, e.balance, COALESCE(e.category_id, 0),
 		       e.confidence_level, e.imported_at, e.corrected_at
 		FROM %s
-		ORDER BY %s %s, e.date DESC, e.id DESC`, fromClause, sortExpression, sortDirection)
+		%s
+		ORDER BY %s %s, e.date DESC, e.id DESC`, fromClause, whereClause, sortExpression, sortDirection)
 
-	rows, err := r.db.QueryContext(ctx, query)
+	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query expenses: %w", err)
 	}

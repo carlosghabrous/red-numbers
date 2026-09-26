@@ -84,6 +84,40 @@ func TestExpenseRepositoryGetByFiltersSorting(t *testing.T) {
 	}
 }
 
+func TestExpenseRepositoryGetByFilterOptions(t *testing.T) {
+	db := newExpenseTestDB(t)
+	repository := NewExpenseRepository(db)
+	baseDate := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
+	expenses := []models.Expense{
+		{Date: baseDate, Description: "Casa", Amount: 30, Balance: 1, CategoryID: 1, ImportedAt: baseDate},
+		{Date: baseDate.AddDate(0, 0, 1), Description: "Ocio", Amount: 10, Balance: 1, CategoryID: 2, ImportedAt: baseDate},
+		{Date: baseDate.AddDate(0, 0, 2), Description: "Casa later", Amount: 20, Balance: 1, CategoryID: 1, ImportedAt: baseDate},
+	}
+	if err := repository.CreateBatch(context.Background(), expenses); err != nil {
+		t.Fatalf("CreateBatch failed: %v", err)
+	}
+
+	start := baseDate
+	end := baseDate.AddDate(0, 0, 2)
+	filtered, err := repository.GetByFilterOptions(context.Background(), ExpenseFilterOptions{
+		SortBy: "date", SortDirection: "asc", CategoryIDs: []int64{1, 2}, StartDate: &start, EndDate: &end,
+	})
+	if err != nil {
+		t.Fatalf("GetByFilterOptions failed: %v", err)
+	}
+	if len(filtered) != 2 || filtered[0].Description != "Casa" || filtered[1].Description != "Ocio" {
+		t.Fatalf("expected date-bounded results with OR category filter, got %+v", filtered)
+	}
+
+	filtered, err = repository.GetByFilterOptions(context.Background(), ExpenseFilterOptions{CategoryIDs: []int64{1}})
+	if err != nil {
+		t.Fatalf("single category filter failed: %v", err)
+	}
+	if len(filtered) != 2 {
+		t.Fatalf("expected 2 casa expenses, got %d", len(filtered))
+	}
+}
+
 func TestExpenseRepositoryCreateAndGetAll(t *testing.T) {
 	db := newExpenseTestDB(t)
 	repository := NewExpenseRepository(db)

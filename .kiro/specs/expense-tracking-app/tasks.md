@@ -248,45 +248,45 @@ This document organizes the expense tracking application implementation into 11 
 
 ### Tasks
 
-- [~] 5.1 Add category filter UI controls
+- [x] 5.1 Add category filter UI controls
   - Create checkbox list for all 7 categories
   - Display category name and icon/color
   - Add "Select All" / "Clear All" convenience buttons
   - _Requirements: 6.0, 14.0_
 
-- [~] 5.2 Extend ExpenseRepository.GetByFilters with category filtering
+- [x] 5.2 Extend ExpenseRepository.GetByFilters with category filtering
   - Add categoryIds parameter (array/list)
   - Implement SQL WHERE clause for category matching (IN operator)
   - Support multiple categories with OR logic
   - _Requirements: 6.0_
 
-- [~] 5.3 Update dashboard to apply category filters
+- [x] 5.3 Update dashboard to apply category filters
   - Accept category filter from form submission or query string
   - Pass to repository.GetByFilters()
   - Combine with existing sort
   - Update table with filtered results
   - _Requirements: 6.0_
 
-- [~] 5.4 Show active filter indication
+- [x] 5.4 Show active filter indication
   - Display "Filters Active: X categories selected"
   - Show selected categories clearly
   - Provide easy "Clear Filters" button
   - _Requirements: 6.0, 14.0_
 
-- [~] 5.5 Ensure visual continuity with sort
+- [x] 5.5 Ensure visual continuity with sort
   - Sorting works correctly with category filter applied
   - Filter and sort preferences both persist (cookie)
   - Display both sort and filter state clearly
   - _Requirements: 5.0, 6.0_
 
-- [ ]* 5.6 Write unit tests for category filtering
+- [x] 5.6 Write unit tests for category filtering
   - Test single category filter
   - Test multiple category filters (OR logic)
   - Test filter combined with sort
   - Test empty result set handling
   - _Requirements: 6.0_
 
-- [ ]* 5.7 Write integration test for filtering workflow
+- [x] 5.7 Write integration test for filtering workflow
   - Apply category filter, verify table updates
   - Combine filter with sort, verify both applied
   - Clear filter, verify all expenses show again
@@ -307,46 +307,46 @@ This document organizes the expense tracking application implementation into 11 
 
 ### Tasks
 
-- [~] 6.1 Add date range filter UI controls
+- [x] 6.1 Add date range filter UI controls
   - Create radio buttons: "All Dates", "Current Month", "Previous Month"
   - Add custom date range inputs (start date, end date picker)
   - Add visual indicator showing active date filter
   - _Requirements: 7.0, 14.0_
 
-- [~] 6.2 Implement date range validation
+- [x] 6.2 Implement date range validation
   - Validate that start_date ≤ end_date
   - Show error message for invalid ranges
   - Disable "Apply" button for invalid input
   - _Requirements: 7.0_
 
-- [~] 6.3 Extend ExpenseRepository.GetByFilters with date filtering
+- [x] 6.3 Extend ExpenseRepository.GetByFilters with date filtering
   - Add startDate and endDate parameters
   - Implement SQL WHERE clause for date range (BETWEEN)
   - Support "current month" calculated from current date
   - Support "previous month" calculated from current date
   - _Requirements: 7.0_
 
-- [~] 6.4 Update dashboard to apply date range filters
+- [x] 6.4 Update dashboard to apply date range filters
   - Accept date filter from form submission or query string
   - Pass to repository.GetByFilters()
   - Combine with existing category filter and sort
   - Update table with filtered results
   - _Requirements: 7.0_
 
-- [~] 6.5 Display active date filter state
+- [x] 6.5 Display active date filter state
   - Show "Date Filter: Current Month" or date range
   - Display start and end dates clearly
   - Provide "Clear Date Filter" button
   - _Requirements: 7.0, 14.0_
 
-- [~] 6.6 Ensure filter combination works smoothly
+- [x] 6.6 Ensure filter combination works smoothly
   - Date filter + category filter works correctly
   - Date filter + sort works correctly
   - Date filter + category filter + sort all work together
   - All preferences persist via cookie
   - _Requirements: 5.0, 6.0, 7.0_
 
-- [ ]* 6.7 Write unit tests for date range filtering
+- [x] 6.7 Write unit tests for date range filtering
   - Test current month filter
   - Test previous month filter
   - Test custom date range validation
@@ -354,7 +354,7 @@ This document organizes the expense tracking application implementation into 11 
   - Test combined filters
   - _Requirements: 7.0_
 
-- [ ]* 6.8 Write integration test for date filtering workflow
+- [x] 6.8 Write integration test for date filtering workflow
   - Apply date range, verify table updates
   - Combine date filter with category and sort, verify all applied
   - Test edge cases (first/last day of month, invalid dates)

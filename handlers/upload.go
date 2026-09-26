@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -391,11 +392,19 @@ func (h *UploadHandler) HandleGetDashboard(w http.ResponseWriter, r *http.Reques
 	}
 
 	sortBy, sortDirection := dashboardSortPreference(r)
+	filterState, err := dashboardFilterStateFromRequest(r)
+	if err != nil {
+		h.renderUploadError(w, err.Error(), nil)
+		return
+	}
 	if r.URL.Query().Get("sort") != "" || r.URL.Query().Get("direction") != "" {
 		http.SetCookie(w, &http.Cookie{Name: "expense_sort", Value: sortBy + ":" + sortDirection, Path: "/", MaxAge: 60 * 60 * 24 * 365, HttpOnly: true, SameSite: http.SameSiteLaxMode})
 	}
+	http.SetCookie(w, &http.Cookie{Name: "expense_filters", Value: filterState.cookieValue(), Path: "/", MaxAge: 60 * 60 * 24 * 365, HttpOnly: true, SameSite: http.SameSiteLaxMode})
 
-	expenses, err := h.expenses.GetByFilters(r.Context(), sortBy, sortDirection)
+	filterState.options.SortBy = sortBy
+	filterState.options.SortDirection = sortDirection
+	expenses, err := h.expenses.GetByFilterOptions(r.Context(), filterState.options)
 	if err != nil {
 		h.logger.ErrorContext(r.Context(), "Failed to load expenses", slog.String("error", err.Error()))
 		h.renderUploadError(w, "Failed to load expenses from the database", nil)
@@ -413,7 +422,105 @@ func (h *UploadHandler) HandleGetDashboard(w http.ResponseWriter, r *http.Reques
 		categoryNames[int64(category.ID)] = category.DisplayName
 	}
 
-	h.renderDashboard(w, expenses, categoryNames, sortBy, sortDirection)
+	h.renderDashboard(w, expenses, categoryNames, categories, sortBy, sortDirection, filterState)
+}
+
+type dashboardFilterState struct {
+	options   repositories.ExpenseFilterOptions
+	dateMode  string
+	startDate string
+	endDate   string
+	endInput  string
+}
+
+func (state dashboardFilterState) cookieValue() string {
+	ids := make([]string, len(state.options.CategoryIDs))
+	for index, id := range state.options.CategoryIDs {
+		ids[index] = strconv.FormatInt(id, 10)
+	}
+	endValue := state.endInput
+	if endValue == "" {
+		endValue = state.endDate
+	}
+	return strings.Join([]string{strings.Join(ids, ","), state.dateMode, state.startDate, endValue}, "|")
+}
+
+func dashboardFilterStateFromRequest(r *http.Request) (dashboardFilterState, error) {
+	state := dashboardFilterState{dateMode: "all"}
+	query := r.URL.Query()
+	if query.Get("clear_filters") == "1" {
+		return state, nil
+	}
+	categoryValues, categoryProvided := query["category"]
+	if !categoryProvided {
+		if cookie, err := r.Cookie("expense_filters"); err == nil {
+			parts := strings.Split(cookie.Value, "|")
+			if len(parts) == 4 {
+				categoryValues = strings.Split(parts[0], ",")
+				if parts[0] == "" {
+					categoryValues = nil
+				}
+				state.dateMode, state.startDate, state.endInput = parts[1], parts[2], parts[3]
+			}
+		}
+	}
+	for _, value := range categoryValues {
+		id, err := strconv.ParseInt(value, 10, 64)
+		if err != nil || id <= 0 {
+			return state, fmt.Errorf("invalid category filter")
+		}
+		state.options.CategoryIDs = append(state.options.CategoryIDs, id)
+	}
+	if value := query.Get("date_filter"); value != "" {
+		state.dateMode = value
+		state.startDate = query.Get("start_date")
+		state.endInput = query.Get("end_date")
+	}
+	if state.dateMode == "" {
+		state.dateMode = "all"
+	}
+
+	now := time.Now()
+	switch state.dateMode {
+	case "all":
+		return state, nil
+	case "current":
+		state.startDate = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location()).Format("2006-01-02")
+		state.endDate = time.Date(now.Year(), now.Month()+1, 1, 0, 0, 0, 0, now.Location()).Format("2006-01-02")
+		state.endInput = state.endDate
+	case "previous":
+		first := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+		state.startDate = first.AddDate(0, -1, 0).Format("2006-01-02")
+		state.endDate = first.Format("2006-01-02")
+		state.endInput = state.endDate
+	case "custom":
+		if state.startDate == "" || state.endInput == "" {
+			return state, fmt.Errorf("custom date filters require both start and end dates")
+		}
+		start, startErr := time.Parse("2006-01-02", state.startDate)
+		end, endErr := time.Parse("2006-01-02", state.endInput)
+		if startErr != nil || endErr != nil || start.After(end) {
+			return state, fmt.Errorf("start date must be on or before end date")
+		}
+		state.endDate = end.AddDate(0, 0, 1).Format("2006-01-02")
+	default:
+		return state, fmt.Errorf("invalid date filter")
+	}
+	if state.startDate != "" {
+		start, err := time.Parse("2006-01-02", state.startDate)
+		if err != nil {
+			return state, fmt.Errorf("invalid start date")
+		}
+		state.options.StartDate = &start
+	}
+	if state.endDate != "" {
+		end, err := time.Parse("2006-01-02", state.endDate)
+		if err != nil {
+			return state, fmt.Errorf("invalid end date")
+		}
+		state.options.EndDate = &end
+	}
+	return state, nil
 }
 
 func dashboardSortPreference(r *http.Request) (string, string) {
@@ -434,7 +541,7 @@ func dashboardSortPreference(r *http.Request) (string, string) {
 	return sortBy, sortDirection
 }
 
-func (h *UploadHandler) renderDashboard(w http.ResponseWriter, expenses []models.Expense, categoryNames map[int64]string, sortBy, sortDirection string) {
+func (h *UploadHandler) renderDashboard(w http.ResponseWriter, expenses []models.Expense, categoryNames map[int64]string, categories []models.Category, sortBy, sortDirection string, filterState dashboardFilterState) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 
@@ -469,6 +576,9 @@ func (h *UploadHandler) renderDashboard(w http.ResponseWriter, expenses []models
 		.actions a { margin-top: 0; padding: 8px 12px; background: #007bff; color: white; text-decoration: none; border-radius: 4px; }
 		.actions a:hover { background: #0056b3; }
 		.active-sort { background: #e8f0fe; }
+		.filter-controls { border: 1px solid #ddd; padding: 14px; margin: 12px 0 20px; }
+		.category-options { display: flex; gap: 12px; flex-wrap: wrap; margin: 8px 0; }
+		.filter-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 		a { display: inline-block; margin-top: 20px; }
 	</style>
 </head>
@@ -497,15 +607,17 @@ func (h *UploadHandler) renderDashboard(w http.ResponseWriter, expenses []models
 			</label>
 			<button type="submit">Apply sort</button>
 		</form>
+		%s
 		<div class="table-scroll">
 			<table>
 				<thead><tr><th class="%s">Date</th><th class="%s">Description</th><th class="%s">Amount</th><th>Balance</th><th class="%s">Category</th><th>Confidence</th></tr></thead>
 				<tbody>%s</tbody>
 			</table>
 		</div>
-	</div>
+</div>
 </body>
-</html>`, len(expenses), selectedOption(sortBy, "date"), selectedOption(sortBy, "amount"), selectedOption(sortBy, "category"), selectedOption(sortBy, "description"), selectedOption(sortDirection, "asc"), selectedOption(sortDirection, "desc"),
+		</html>`, len(expenses), selectedOption(sortBy, "date"), selectedOption(sortBy, "amount"), selectedOption(sortBy, "category"), selectedOption(sortBy, "description"), selectedOption(sortDirection, "asc"), selectedOption(sortDirection, "desc"),
+		renderDashboardFilters(categories, filterState),
 		activeSortClass(sortBy, "date"), activeSortClass(sortBy, "description"), activeSortClass(sortBy, "amount"), activeSortClass(sortBy, "category"), rows)
 }
 
@@ -521,6 +633,59 @@ func activeSortClass(current, option string) string {
 		return "active-sort"
 	}
 	return ""
+}
+
+func renderDashboardFilters(categories []models.Category, state dashboardFilterState) string {
+	selected := make(map[int64]bool, len(state.options.CategoryIDs))
+	for _, id := range state.options.CategoryIDs {
+		selected[id] = true
+	}
+	categoryOptions := ""
+	for _, category := range categories {
+		checked := ""
+		if selected[int64(category.ID)] {
+			checked = " checked"
+		}
+		categoryOptions += fmt.Sprintf(`<label><input type="checkbox" name="category" value="%d"%s> %s</label>`, category.ID, checked, html.EscapeString(category.DisplayName))
+	}
+	endInput := state.endInput
+	if endInput == "" && state.dateMode != "all" {
+		endInput = state.endDate
+		if endInput != "" {
+			if end, err := time.Parse("2006-01-02", endInput); err == nil {
+				endInput = end.AddDate(0, 0, -1).Format("2006-01-02")
+			}
+		}
+	}
+	dateLabel := "All Dates"
+	switch state.dateMode {
+	case "current":
+		dateLabel = "Current Month"
+	case "previous":
+		dateLabel = "Previous Month"
+	case "custom":
+		dateLabel = "Custom Dates"
+	}
+	return fmt.Sprintf(`<form class="filter-controls" method="get" action="/">
+		<input type="hidden" name="sort" value="%s">
+		<input type="hidden" name="direction" value="%s">
+		<strong>Categories</strong>
+		<div class="category-options">%s</div>
+		<div class="filter-actions">
+			<strong>Date range</strong>
+			<label><input type="radio" name="date_filter" value="all"%s> All Dates</label>
+			<label><input type="radio" name="date_filter" value="current"%s> Current Month</label>
+			<label><input type="radio" name="date_filter" value="previous"%s> Previous Month</label>
+			<label><input type="radio" name="date_filter" value="custom"%s> Custom</label>
+			<input type="date" name="start_date" value="%s">
+			<input type="date" name="end_date" value="%s">
+			<button type="submit">Apply filters</button>
+			<a href="/?clear_filters=1">Clear filters</a>
+		</div>
+		<div>Active filters: %d categories, %s</div>
+	</form>`, html.EscapeString(state.options.SortBy), html.EscapeString(state.options.SortDirection), categoryOptions,
+		selectedOption(state.dateMode, "all"), selectedOption(state.dateMode, "current"), selectedOption(state.dateMode, "previous"), selectedOption(state.dateMode, "custom"),
+		html.EscapeString(state.startDate), html.EscapeString(endInput), len(state.options.CategoryIDs), dateLabel)
 }
 
 // HandleGetClassificationLog renders automatic classification decisions.

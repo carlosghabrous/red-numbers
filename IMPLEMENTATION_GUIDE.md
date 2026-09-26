@@ -91,20 +91,24 @@ go run main.go
 - ✅ Initial data models created
 - ✅ Slice 1: CSV Upload and Raw Display
 - ✅ Slice 2: Database Storage and Persistence
+- ✅ Slice 3: Basic Classification
+- ✅ Slice 4: Sorting
+- ✅ Slice 5: Category Filtering
+- ✅ Slice 6: Date Range Filtering
 
 **Next to implement:**
-- 🔲 Slice 3: Basic Classification
+- 🔲 Slice 7: Expense Correction UI
 
 ## What to Implement Next
 
-Continue with **Slice 3: Basic Classification**
+Continue with **Slice 7: Expense Correction UI**
 
-Slice 1 established the upload and raw display flow, and Slice 2 added persistence. The next slice adds:
-1. **Keyword patterns** - Define matching terms for each expense category
-2. **Fuzzy classification** - Assign categories and confidence levels to persisted expenses
-3. **Dashboard results** - Display category and confidence with each expense
+Slices 1 through 6 established upload, persistence, classification, sorting, and filtering. The next slice adds:
+1. **Expense detail page** - View a single stored expense
+2. **Category correction** - Change and save its assigned category
+3. **Updated dashboard** - Show the corrected category in the list
 
-**Success:** Upload a CSV file → See each expense classified on the dashboard
+**Success:** Open an expense → Correct its category → See the change on the dashboard
 
 This adds category assignment on top of the persisted expense data.
 
@@ -166,4 +170,4 @@ Each requirement and design section includes examples and acceptance criteria.
 
 ---
 
-**Next Step:** Start with Slice 3 tasks in `tasks.md` and add basic classification.
+**Next Step:** Start with Slice 7 tasks in `tasks.md` and add expense correction.

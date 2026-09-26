@@ -188,3 +188,11 @@ func TestDashboardSortPreferenceUsesQueryAndCookie(t *testing.T) {
 		t.Fatalf("expected cookie sort preference description/desc, got %s/%s", sortBy, direction)
 	}
 }
+
+func TestDashboardFilterStateRejectsInvalidCustomRange(t *testing.T) {
+	request := httptest.NewRequest(http.MethodGet, "/?date_filter=custom&start_date=2026-02-01&end_date=2026-01-31", nil)
+	_, err := dashboardFilterStateFromRequest(request)
+	if err == nil {
+		t.Fatal("expected invalid custom date range to be rejected")
+	}
+}
