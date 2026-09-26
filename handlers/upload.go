@@ -335,12 +335,13 @@ func (h *UploadHandler) HandlePostUpload(w http.ResponseWriter, r *http.Request)
 	h.logger.InfoContext(r.Context(), "CSV parsed successfully", slog.Int("expense_count", len(expenses)))
 	savedCount := 0
 	if h.expenses != nil {
-		if err := h.expenses.CreateBatch(r.Context(), expenses); err != nil {
+		insertedCount, err := h.expenses.CreateBatchWithCount(r.Context(), expenses)
+		if err != nil {
 			h.logger.ErrorContext(r.Context(), "Failed to save expenses", slog.String("error", err.Error()))
 			h.renderUploadError(w, "Failed to save expenses to the database", nil)
 			return
 		}
-		savedCount = len(expenses)
+		savedCount = insertedCount
 		for index, classification := range classifications {
 			if err := h.expenses.LogClassification(r.Context(), expenses[index], repositories.ClassificationLog{
 				CategoryName: classification.CategoryName,
@@ -439,6 +440,20 @@ func (h *UploadHandler) HandleGetDashboard(w http.ResponseWriter, r *http.Reques
 	}
 
 	h.renderDashboard(w, expenses, categoryNames, categories, sortBy, sortDirection, filterState, page, totalExpenses, r.URL.RawQuery)
+}
+
+// HandlePostDeleteAll removes every imported expense after explicit confirmation.
+func (h *UploadHandler) HandlePostDeleteAll(w http.ResponseWriter, r *http.Request) {
+	if r.FormValue("confirm") != "delete-all" {
+		http.Error(w, "Deletion was not confirmed", http.StatusBadRequest)
+		return
+	}
+	if err := h.expenses.DeleteAll(r.Context()); err != nil {
+		h.logger.ErrorContext(r.Context(), "Failed to delete all expenses", slog.String("error", err.Error()))
+		h.renderUploadError(w, "Failed to delete all expenses", nil)
+		return
+	}
+	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
 func dashboardPage(r *http.Request) (int, error) {
@@ -607,6 +622,8 @@ func (h *UploadHandler) renderDashboard(w http.ResponseWriter, expenses []models
 		.actions { display: flex; gap: 10px; margin: 20px 0; flex-wrap: wrap; }
 		.actions a { margin-top: 0; padding: 8px 12px; background: #007bff; color: white; text-decoration: none; border-radius: 4px; }
 		.actions a:hover { background: #0056b3; }
+		.actions .danger { background: #b42318; }
+		.actions .danger:hover { background: #8f1d14; }
 		.active-sort { background: #e8f0fe; }
 		.filter-controls { border: 1px solid #ddd; padding: 14px; margin: 12px 0 20px; }
 		.category-options { display: flex; gap: 12px; flex-wrap: wrap; margin: 8px 0; }
@@ -624,6 +641,10 @@ func (h *UploadHandler) renderDashboard(w http.ResponseWriter, expenses []models
 		<div class="actions">
 			<a href="/upload">Upload another CSV</a>
 			<a href="/classification-log">Classification log</a>
+			<form method="post" action="/expenses/delete-all" onsubmit="return confirm('Delete all expenses and classification logs?');">
+				<input type="hidden" name="confirm" value="delete-all">
+				<button class="danger" type="submit">Delete all records</button>
+			</form>
 		</div>
 		<form class="sort-controls" method="get" action="/">
 			<label>Sort by

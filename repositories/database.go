@@ -66,6 +66,11 @@ func InitializeDatabase(ctx context.Context, config DatabaseConfig, logger *slog
 		db.Close()
 		return nil, err
 	}
+	if err := NewExpenseRepository(db).BackfillFingerprints(ctx); err != nil {
+		logger.Error("failed to backfill expense fingerprints", "error", err)
+		db.Close()
+		return nil, err
+	}
 
 	// Log migration completion
 	count, err := migrationManager.GetAppliedMigrationCount(ctx)

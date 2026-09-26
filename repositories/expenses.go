@@ -2,6 +2,7 @@ package repositories
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"fmt"
 	"strings"
@@ -22,27 +23,39 @@ func NewExpenseRepository(db *sql.DB) *ExpenseRepository {
 
 // Create stores one expense and assigns its database ID.
 func (r *ExpenseRepository) Create(ctx context.Context, expense *models.Expense) error {
-	return r.create(ctx, r.db, expense)
+	_, err := r.create(ctx, r.db, expense)
+	return err
 }
 
 // CreateBatch stores all expenses in one transaction.
 func (r *ExpenseRepository) CreateBatch(ctx context.Context, expenses []models.Expense) error {
+	_, err := r.CreateBatchWithCount(ctx, expenses)
+	return err
+}
+
+// CreateBatchWithCount stores only new expenses and returns the inserted count.
+func (r *ExpenseRepository) CreateBatchWithCount(ctx context.Context, expenses []models.Expense) (int, error) {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("failed to begin expense transaction: %w", err)
+		return 0, fmt.Errorf("failed to begin expense transaction: %w", err)
 	}
 	defer tx.Rollback()
 
+	inserted := 0
 	for i := range expenses {
-		if err := r.create(ctx, tx, &expenses[i]); err != nil {
-			return fmt.Errorf("failed to create expense %d: %w", i, err)
+		wasInserted, err := r.create(ctx, tx, &expenses[i])
+		if err != nil {
+			return 0, fmt.Errorf("failed to create expense %d: %w", i, err)
+		}
+		if wasInserted {
+			inserted++
 		}
 	}
 
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("failed to commit expense transaction: %w", err)
+		return 0, fmt.Errorf("failed to commit expense transaction: %w", err)
 	}
-	return nil
+	return inserted, nil
 }
 
 // GetAll returns all expenses ordered from newest to oldest.
@@ -50,16 +63,62 @@ func (r *ExpenseRepository) GetAll(ctx context.Context) ([]models.Expense, error
 	return r.GetByFilters(ctx, "date", "desc")
 }
 
+// BackfillFingerprints assigns fingerprints to records created before deduplication.
+func (r *ExpenseRepository) BackfillFingerprints(ctx context.Context) error {
+	rows, err := r.db.QueryContext(ctx, `SELECT id, date, description, amount, balance FROM expenses WHERE fingerprint IS NULL OR fingerprint = ''`)
+	if err != nil {
+		return fmt.Errorf("failed to find records without fingerprints: %w", err)
+	}
+	defer rows.Close()
+	type record struct {
+		id      int64
+		expense models.Expense
+	}
+	var records []record
+	for rows.Next() {
+		var item record
+		if err := rows.Scan(&item.id, &item.expense.Date, &item.expense.Description, &item.expense.Amount, &item.expense.Balance); err != nil {
+			return err
+		}
+		records = append(records, item)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for _, item := range records {
+		if _, err := r.db.ExecContext(ctx, `UPDATE expenses SET fingerprint = ? WHERE id = ?`, fingerprintForExpense(item.expense), item.id); err != nil {
+			return fmt.Errorf("failed to backfill expense fingerprint: %w", err)
+		}
+	}
+	return nil
+}
+
+// DeleteAll removes all imported expenses and their audit entries.
+func (r *ExpenseRepository) DeleteAll(ctx context.Context) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `DELETE FROM audit_log`); err != nil {
+		return fmt.Errorf("failed to delete audit log: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM expenses`); err != nil {
+		return fmt.Errorf("failed to delete expenses: %w", err)
+	}
+	return tx.Commit()
+}
+
 // GetByID returns one expense by database ID.
 func (r *ExpenseRepository) GetByID(ctx context.Context, id int64) (*models.Expense, error) {
 	const query = `
-		SELECT id, date, description, amount, balance, COALESCE(category_id, 0),
+		SELECT id, date, description, amount, balance, COALESCE(category_id, 0), fingerprint,
 		       confidence_level, imported_at, corrected_at
 		FROM expenses WHERE id = ?`
 	var expense models.Expense
 	err := r.db.QueryRowContext(ctx, query, id).Scan(
 		&expense.ID, &expense.Date, &expense.Description, &expense.Amount, &expense.Balance,
-		&expense.CategoryID, &expense.ConfidenceLevel, &expense.ImportedAt, &expense.CorrectedAt,
+		&expense.CategoryID, &expense.Fingerprint, &expense.ConfidenceLevel, &expense.ImportedAt, &expense.CorrectedAt,
 	)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -151,11 +210,11 @@ func (r *ExpenseRepository) GetByFilterOptions(ctx context.Context, options Expe
 		conditions = append(conditions, "e.category_id IN ("+strings.Join(placeholders, ",")+")")
 	}
 	if options.StartDate != nil {
-		conditions = append(conditions, "e.date >= ?")
+		conditions = append(conditions, "date(e.date) >= date(?)")
 		args = append(args, options.StartDate.Format("2006-01-02"))
 	}
 	if options.EndDate != nil {
-		conditions = append(conditions, "e.date < ?")
+		conditions = append(conditions, "date(e.date) < date(?)")
 		args = append(args, options.EndDate.Format("2006-01-02"))
 	}
 	whereClause := ""
@@ -171,7 +230,7 @@ func (r *ExpenseRepository) GetByFilterOptions(ctx context.Context, options Expe
 	}
 
 	query := fmt.Sprintf(`
-		SELECT e.id, e.date, e.description, e.amount, e.balance, COALESCE(e.category_id, 0),
+		SELECT e.id, e.date, e.description, e.amount, e.balance, COALESCE(e.category_id, 0), e.fingerprint,
 		       e.confidence_level, e.imported_at, e.corrected_at
 		FROM %s
 		%s
@@ -193,6 +252,7 @@ func (r *ExpenseRepository) GetByFilterOptions(ctx context.Context, options Expe
 			&expense.Amount,
 			&expense.Balance,
 			&expense.CategoryID,
+			&expense.Fingerprint,
 			&expense.ConfidenceLevel,
 			&expense.ImportedAt,
 			&expense.CorrectedAt,
@@ -224,11 +284,11 @@ func (r *ExpenseRepository) CountByFilterOptions(ctx context.Context, options Ex
 		conditions = append(conditions, "e.category_id IN ("+strings.Join(placeholders, ",")+")")
 	}
 	if options.StartDate != nil {
-		conditions = append(conditions, "e.date >= ?")
+		conditions = append(conditions, "date(e.date) >= date(?)")
 		args = append(args, options.StartDate.Format("2006-01-02"))
 	}
 	if options.EndDate != nil {
-		conditions = append(conditions, "e.date < ?")
+		conditions = append(conditions, "date(e.date) < date(?)")
 		args = append(args, options.EndDate.Format("2006-01-02"))
 	}
 	whereClause := ""
@@ -303,13 +363,24 @@ func (r *ExpenseRepository) GetClassificationLogs(ctx context.Context) ([]Classi
 
 type expenseWriter interface {
 	ExecContext(context.Context, string, ...any) (sql.Result, error)
+	QueryRowContext(context.Context, string, ...any) *sql.Row
 }
 
-func (r *ExpenseRepository) create(ctx context.Context, writer expenseWriter, expense *models.Expense) error {
+func (r *ExpenseRepository) create(ctx context.Context, writer expenseWriter, expense *models.Expense) (bool, error) {
+	if expense.Fingerprint == "" {
+		expense.Fingerprint = fingerprintForExpense(*expense)
+	}
+	var existingID int64
+	if err := writer.QueryRowContext(ctx, `SELECT id FROM expenses WHERE fingerprint = ? LIMIT 1`, expense.Fingerprint).Scan(&existingID); err == nil {
+		expense.ID = existingID
+		return false, nil
+	} else if err != sql.ErrNoRows {
+		return false, err
+	}
 	const query = `
 		INSERT INTO expenses
-			(date, description, amount, balance, category_id, confidence_level, imported_at, corrected_at)
-		VALUES (?, ?, ?, ?, NULLIF(?, 0), ?, ?, ?)`
+			(date, description, amount, balance, category_id, confidence_level, imported_at, corrected_at, fingerprint)
+		VALUES (?, ?, ?, ?, NULLIF(?, 0), ?, ?, ?, ?)`
 
 	confidenceLevel := expense.ConfidenceLevel
 	if confidenceLevel == "" {
@@ -325,11 +396,18 @@ func (r *ExpenseRepository) create(ctx context.Context, writer expenseWriter, ex
 		confidenceLevel,
 		expense.ImportedAt,
 		expense.CorrectedAt,
+		expense.Fingerprint,
 	)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	expense.ID, err = result.LastInsertId()
-	return err
+	return true, err
+}
+
+func fingerprintForExpense(expense models.Expense) string {
+	value := fmt.Sprintf("%s\x00%s\x00%.17g\x00%.17g", expense.Date.Format("2006-01-02"), expense.Description, expense.Amount, expense.Balance)
+	hash := sha256.Sum256([]byte(value))
+	return fmt.Sprintf("%x", hash[:])
 }

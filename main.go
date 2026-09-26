@@ -115,6 +115,7 @@ func main() {
 	mux.HandleFunc("GET /upload", uploadHandler.HandleGetUpload)
 	mux.HandleFunc("POST /upload", uploadHandler.HandlePostUpload)
 	mux.HandleFunc("GET /classification-log", uploadHandler.HandleGetClassificationLog)
+	mux.HandleFunc("POST /expenses/delete-all", uploadHandler.HandlePostDeleteAll)
 	mux.HandleFunc("GET /expenses/{id}", uploadHandler.HandleGetExpenseDetail)
 	mux.HandleFunc("POST /expenses/{id}", uploadHandler.HandlePostExpenseDetail)
 
