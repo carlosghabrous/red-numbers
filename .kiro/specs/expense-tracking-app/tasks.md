@@ -553,96 +553,7 @@ This document organizes the expense tracking application implementation into 11 
 
 ---
 
-## Slice 10: Weekly and Monthly Histograms
-
-**Goal:** Display bar charts showing spending trends by week and month.
-
-**Success Criteria:**
-- Dashboard shows weekly histogram (7-day periods)
-- Dashboard shows monthly histogram (calendar months)
-- Charts stack or group by category
-- Charts responsive on all screen sizes
-- Estimated effort: 5-6 hours
-
-### Tasks
-
-- [~] 10.1 Create histogram data preparation service
-  - Create method to aggregate expenses by week (Mon-Sun)
-  - Create method to aggregate expenses by month
-  - Calculate totals per category per period
-  - Sort periods chronologically
-  - _Requirements: 9.0, 10.0_
-
-- [~] 10.2 Implement weekly histogram rendering
-  - Create SVG bar chart generator for weekly data
-  - Calculate bar dimensions and positions
-  - Stack or group bars by category
-  - Assign consistent colors to categories
-  - _Requirements: 9.0, 14.0_
-
-- [~] 10.3 Implement monthly histogram rendering
-  - Create SVG bar chart generator for monthly data
-  - Calculate bar dimensions and positions
-  - Stack or group bars by category
-  - Use same color scheme as weekly chart
-  - _Requirements: 10.0, 14.0_
-
-- [~] 10.4 Add axes and labels to histograms
-  - Display x-axis with week/month labels
-  - Display y-axis with amount scale
-  - Add axis labels and gridlines if needed
-  - Format y-axis scale appropriately
-  - _Requirements: 9.0, 10.0, 14.0_
-
-- [~] 10.5 Implement tooltips for histogram bars
-  - Show week/month, category, and amount on hover
-  - Position tooltip near cursor
-  - Update position on mouse move
-  - _Requirements: 9.0, 10.0, 14.0_
-
-- [~] 10.6 Integrate histograms into dashboard
-  - Add weekly histogram section to dashboard
-  - Add monthly histogram section to dashboard
-  - Call data preparation services on page load
-  - Render charts into page with proper spacing
-  - _Requirements: 9.0, 10.0, 14.0_
-
-- [~] 10.7 Make histograms responsive for mobile
-  - Reduce chart size on screens < 768px
-  - Stack charts vertically on mobile
-  - Reduce bar width to prevent overflow
-  - Ensure all labels readable
-  - _Requirements: 9.0, 10.0, 15.0_
-
-- [~] 10.8 Update histograms when filters change
-  - Re-calculate chart data when filters applied
-  - Update chart display with new data
-  - Handle case where no expenses in time range
-  - _Requirements: 9.0, 10.0, 6.0, 7.0_
-
-- [ ]* 10.9 Write unit tests for histogram data aggregation
-  - Test weekly aggregation with various dates
-  - Test monthly aggregation with various dates
-  - Test category subtotals per period
-  - Test edge cases (week boundaries, year boundaries)
-  - _Requirements: 9.0, 10.0_
-
-- [ ]* 10.10 Write unit tests for histogram rendering
-  - Test SVG generation for various data shapes
-  - Test bar positioning and sizing
-  - Test axis label formatting
-  - _Requirements: 9.0, 10.0_
-
-- [ ]* 10.11 Write integration test for histogram display
-  - Load dashboard, verify weekly and monthly charts visible
-  - Apply date range filter, verify charts update
-  - Apply category filter, verify bars update
-  - Test responsiveness on mobile/tablet/desktop
-  - _Requirements: 9.0, 10.0, 15.0_
-
----
-
-## Slice 11: Re-Classification and Polish
+## Slice 10: Re-Classification and Polish
 
 **Goal:** Auto-update expenses when corrections made; add error handling, logging, and styling.
 
@@ -656,93 +567,182 @@ This document organizes the expense tracking application implementation into 11 
 
 ### Tasks
 
-- [~] 11.1 Implement ReClassifyService for automatic updates
+- [~] 10.1 Implement ReClassifyService for automatic updates
   - Create service to re-classify all expenses after correction
   - Use description pattern matching to find similar expenses
   - Update category for all matching expenses
   - _Requirements: 4.0, 3.0_
 
-- [~] 11.2 Integrate re-classification into correction flow
+- [~] 10.2 Integrate re-classification into correction flow
   - After expense category update, trigger re-classification
   - Show "X similar expenses re-classified" message
   - Update all affected expenses in database
   - Maintain data integrity
   - _Requirements: 4.0, 3.0_
 
-- [~] 11.3 Add re-classification summary and logging
+- [~] 10.3 Add re-classification summary and logging
   - Create re-classification log entry with: count, categories affected, timestamp
   - Display re-classification summary to user
   - Store history for audit purposes
   - _Requirements: 4.0, 3.0_
 
-- [~] 11.4 Refresh dashboard after re-classification
+- [~] 10.4 Refresh dashboard after re-classification
   - Reload table data after re-classification completes
   - Update all statistics and charts
   - Show "Dashboard updated" confirmation
   - _Requirements: 4.0_
 
-- [~] 11.5 Create comprehensive CSS stylesheet
+- [~] 10.5 Create comprehensive CSS stylesheet
   - Design responsive layout for all screen sizes
   - Create mobile-first CSS with media queries
   - Style forms, tables, buttons, and charts
   - Ensure accessibility (contrast, font sizes)
   - _Requirements: 14.0, 15.0_
 
-- [~] 11.6 Add global error handling and middleware
+- [~] 10.6 Add global error handling and middleware
   - Create error handler for all routes
   - Add request logging middleware
   - Implement CSRF protection for forms
   - Add security headers (HSTS, XSS protection, etc.)
   - _Requirements: 14.0_
 
-- [~] 11.7 Add server-side validation and user feedback
+- [~] 10.7 Add server-side validation and user feedback
   - Validate all form inputs server-side
   - Display validation errors near form fields
   - Add success/error flash messages
   - _Requirements: 14.0_
 
-- [~] 11.8 Create comprehensive unit test suite
+- [~] 10.8 Create comprehensive unit test suite
   - Test all service classes (Classifier, Statistics, ReClassify)
   - Test all repository methods
   - Test error conditions and edge cases
   - Aim for 80%+ code coverage
   - _Requirements: 1.0-15.0_
 
-- [~] 11.9 Create comprehensive integration test suite
+- [~] 10.9 Create comprehensive integration test suite
   - Test full CSV import flow end-to-end
   - Test complete filtering and sorting workflows
   - Test correction and re-classification workflow
   - Test dashboard with all widgets
   - _Requirements: 1.0-15.0_
 
-- [~] 11.10 Write README with setup and usage instructions
+- [~] 10.10 Write README with setup and usage instructions
   - Document prerequisites (Go version, SQLite, dependencies)
   - Document build and run instructions
   - Provide example CSV file format
   - Document configuration options
   - _Requirements: 14.0_
 
-- [~] 11.11 Write deployment and production guide
+- [~] 10.11 Write deployment and production guide
   - Document database migration strategy
   - Provide deployment checklist
   - Document scaling considerations
   - Document backup and recovery procedures
   - _Requirements: 12.0, 14.0_
 
-- [~] 11.12 Final testing and polish
+- [~] 10.12 Final testing and polish
   - Test all features on desktop/tablet/mobile
   - Verify all error cases handled gracefully
   - Check accessibility with screen reader
   - Performance testing (load times, database queries)
   - _Requirements: 14.0, 15.0_
 
-- [ ]* 11.13 Write property-based tests for core logic
+- [ ]* 10.13 Write property-based tests for core logic
   - Property test: For any expense, round-trip (classify → view → update) preserves data
   - Property test: For any filter combination, statistics are consistent with displayed data
   - Property test: Re-classification maintains data integrity
   - _Requirements: 1.0, 2.0, 4.0_
 
-- [~] 11.14 Checkpoint - Final verification
+---
+
+## Slice 11: Weekly and Monthly Histograms
+
+**Goal:** Display bar charts showing spending trends by week and month.
+
+**Success Criteria:**
+- Dashboard shows weekly histogram (7-day periods)
+- Dashboard shows monthly histogram (calendar months)
+- Charts stack or group by category
+- Charts responsive on all screen sizes
+- Estimated effort: 5-6 hours
+
+### Tasks
+
+- [~] 11.1 Create histogram data preparation service
+  - Create method to aggregate expenses by week (Mon-Sun)
+  - Create method to aggregate expenses by month
+  - Calculate totals per category per period
+  - Sort periods chronologically
+  - _Requirements: 9.0, 10.0_
+
+- [~] 11.2 Implement weekly histogram rendering
+  - Create SVG bar chart generator for weekly data
+  - Calculate bar dimensions and positions
+  - Stack or group bars by category
+  - Assign consistent colors to categories
+  - _Requirements: 9.0, 14.0_
+
+- [~] 11.3 Implement monthly histogram rendering
+  - Create SVG bar chart generator for monthly data
+  - Calculate bar dimensions and positions
+  - Stack or group bars by category
+  - Use same color scheme as weekly chart
+  - _Requirements: 10.0, 14.0_
+
+- [~] 11.4 Add axes and labels to histograms
+  - Display x-axis with week/month labels
+  - Display y-axis with amount scale
+  - Add axis labels and gridlines if needed
+  - Format y-axis scale appropriately
+  - _Requirements: 9.0, 10.0, 14.0_
+
+- [~] 11.5 Implement tooltips for histogram bars
+  - Show week/month, category, and amount on hover
+  - Position tooltip near cursor
+  - Update position on mouse move
+  - _Requirements: 9.0, 10.0, 14.0_
+
+- [~] 11.6 Integrate histograms into dashboard
+  - Add weekly histogram section to dashboard
+  - Add monthly histogram section to dashboard
+  - Call data preparation services on page load
+  - Render charts into page with proper spacing
+  - _Requirements: 9.0, 10.0, 14.0_
+
+- [~] 11.7 Make histograms responsive for mobile
+  - Reduce chart size on screens < 768px
+  - Stack charts vertically on mobile
+  - Reduce bar width to prevent overflow
+  - Ensure all labels readable
+  - _Requirements: 9.0, 10.0, 15.0_
+
+- [~] 11.8 Update histograms when filters change
+  - Re-calculate chart data when filters applied
+  - Update chart display with new data
+  - Handle case where no expenses in time range
+  - _Requirements: 9.0, 10.0, 6.0, 7.0_
+
+- [ ]* 11.9 Write unit tests for histogram data aggregation
+  - Test weekly aggregation with various dates
+  - Test monthly aggregation with various dates
+  - Test category subtotals per period
+  - Test edge cases (week boundaries, year boundaries)
+  - _Requirements: 9.0, 10.0_
+
+- [ ]* 11.10 Write unit tests for histogram rendering
+  - Test SVG generation for various data shapes
+  - Test bar positioning and sizing
+  - Test axis label formatting
+  - _Requirements: 9.0, 10.0_
+
+- [ ]* 11.11 Write integration test for histogram display
+  - Load dashboard, verify weekly and monthly charts visible
+  - Apply date range filter, verify charts update
+  - Apply category filter, verify bars update
+  - Test responsiveness on mobile/tablet/desktop
+  - _Requirements: 9.0, 10.0, 15.0_
+
+- [~] 11.12 Checkpoint - Final verification
   - Ensure all tests pass
   - Verify all slices working together
   - Test complete workflow from CSV to dashboard
@@ -921,40 +921,40 @@ This document organizes the expense tracking application implementation into 11 
         "10.4",
         "10.5",
         "10.6",
-        "10.7",
-        "10.8",
-        "10.9",
-        "10.10",
-        "10.11"
+        "10.7"
       ]
     },
     {
       "id": 12,
       "tasks": [
-        "11.1",
-        "11.2",
-        "11.3",
-        "11.4",
-        "11.5",
-        "11.6",
-        "11.7"
+        "10.8",
+        "10.9",
+        "10.10",
+        "10.11",
+        "10.12",
+        "10.13",
+        "11.1"
       ]
     },
     {
       "id": 13,
       "tasks": [
+        "11.2",
+        "11.3",
+        "11.4",
+        "11.5",
+        "11.6",
+        "11.7",
         "11.8",
         "11.9",
         "11.10",
-        "11.11",
-        "11.12",
-        "11.13"
+        "11.11"
       ]
     },
     {
       "id": 14,
       "tasks": [
-        "11.14"
+        "11.12"
       ]
     }
   ]
@@ -975,8 +975,8 @@ By the end of all slices, the application will:
 6. ✅ Correct classifications and update database (Slice 7)
 7. ✅ Display summary statistics (Slice 8)
 8. ✅ Visualize data with pie chart (Slice 9)
-9. ✅ Show spending trends with histograms (Slice 10)
-10. ✅ Auto-update similar expenses on correction (Slice 11)
-11. ✅ Production-ready with tests, docs, and styling (Slice 11)
+9. ✅ Auto-update similar expenses on correction (Slice 10)
+10. ✅ Show spending trends with histograms (Slice 11)
+11. ✅ Production-ready with tests, docs, and styling (Slice 10)
 
 Each slice is independently testable in the browser and builds incrementally toward a complete expense tracking system.

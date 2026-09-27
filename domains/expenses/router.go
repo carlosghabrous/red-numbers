@@ -95,7 +95,11 @@ func (h *Handler) HandleGetExpenseDetail(w http.ResponseWriter, r *http.Request)
 	if returnURL == "" || !strings.HasPrefix(returnURL, "/") {
 		returnURL = "/"
 	}
-	h.renderExpenseDetail(w, expense, categoryList, returnURL)
+	selfURL := "/expenses/" + strconv.FormatInt(id, 10)
+	if returnURL != "/" {
+		selfURL += "?return=" + url.QueryEscape(returnURL)
+	}
+	h.renderExpenseDetail(w, expense, categoryList, returnURL, selfURL, r.URL.Query())
 }
 
 // HandlePostExpenseDetail saves a corrected category.
@@ -114,7 +118,8 @@ func (h *Handler) HandlePostExpenseDetail(w http.ResponseWriter, r *http.Request
 		http.Error(w, "Invalid category", http.StatusBadRequest)
 		return
 	}
-	if err := h.service.UpdateCategory(r.Context(), id, categoryID); err != nil {
+	result, err := h.service.UpdateCategory(r.Context(), id, categoryID)
+	if err != nil {
 		if IsInvalidCategory(err) {
 			http.Error(w, "Invalid category", http.StatusBadRequest)
 			return
@@ -128,6 +133,9 @@ func (h *Handler) HandlePostExpenseDetail(w http.ResponseWriter, r *http.Request
 		returnURL = "/"
 	}
 	returnURL = addQueryParameter(returnURL, "updated", "1")
+	if result.ChangedCount > 0 {
+		returnURL = addQueryParameter(returnURL, "reclassified", strconv.Itoa(result.ChangedCount))
+	}
 	http.Redirect(w, r, returnURL, http.StatusSeeOther)
 }
 
@@ -323,7 +331,11 @@ func dashboardMessage(listQuery string) string {
 	if query.Get("updated") != "1" {
 		return ""
 	}
-	return `<p class="success-message">Category updated successfully.</p>`
+	message := "Category updated successfully."
+	if reclassified := query.Get("reclassified"); reclassified != "" {
+		message += fmt.Sprintf(" %s similar expense(s) were also re-classified.", html.EscapeString(reclassified))
+	}
+	return fmt.Sprintf(`<p class="success-message">%s</p>`, message)
 }
 
 func selectedOption(current, option string) string {
@@ -376,7 +388,7 @@ func renderPagination(listQuery string, page, totalExpenses int) string {
 	return markup + "</nav>"
 }
 
-func (h *Handler) renderExpenseDetail(w http.ResponseWriter, expense *Expense, categoryList []categories.Category, returnURL string) {
+func (h *Handler) renderExpenseDetail(w http.ResponseWriter, expense *Expense, categoryList []categories.Category, returnURL, selfURL string, query url.Values) {
 	options := ""
 	for _, category := range categoryList {
 		selected := ""
@@ -388,13 +400,35 @@ func (h *Handler) renderExpenseDetail(w http.ResponseWriter, expense *Expense, c
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	fmt.Fprintf(w, `<!DOCTYPE html>
 <html><head><title>Expense Detail</title><meta charset="UTF-8">
-<style>body{font-family:sans-serif;background:#f5f5f5;padding:20px}.container{max-width:620px;margin:auto;background:#fff;padding:32px}dt{font-weight:bold;margin-top:12px}dd{margin:4px 0}select,button{padding:8px;margin-top:8px}.actions{display:flex;gap:12px;margin-top:24px}.actions a{padding:8px 12px}</style>
+<style>body{font-family:sans-serif;background:#f5f5f5;padding:20px}.container{max-width:620px;margin:auto;background:#fff;padding:32px}dt{font-weight:bold;margin-top:12px}dd{margin:4px 0}select,button,input[type=text]{padding:8px;margin-top:8px}.actions{display:flex;gap:12px;margin-top:24px}.actions a{padding:8px 12px}.add-category{margin-top:20px;padding-top:16px;border-top:1px solid #ddd}.add-category label{font-size:13px;color:#555}.success-message{padding:10px 12px;background:#e7f6ec;color:#176b36;border:1px solid #a7d8b5}.error-message{padding:10px 12px;background:#fdecea;color:#a33a31;border:1px solid #f3b7b0}</style>
 </head><body><div class="container"><h1>Expense Detail</h1>
+%s
 <dl><dt>Date</dt><dd>%s</dd><dt>Description</dt><dd>%s</dd><dt>Amount</dt><dd>%.2f€</dd><dt>Balance</dt><dd>%.2f€</dd><dt>Confidence</dt><dd>%s</dd></dl>
 <form method="post"><input type="hidden" name="return" value="%s"><label for="category_id">Category</label><br><select id="category_id" name="category_id">%s</select><br><button type="submit">Save Changes</button></form>
+<form method="post" action="/categories" class="add-category"><input type="hidden" name="return" value="%s"><label for="display_name">Add a new category</label><br><input type="text" id="display_name" name="display_name" placeholder="e.g. Mascotas" required><button type="submit">Add category</button></form>
 <div class="actions"><a href="%s">Back to List</a></div></div></body></html>`,
+		categoryFormMessage(query),
 		expense.Date.Format("02/01/2006"), html.EscapeString(expense.Description), expense.Amount, expense.Balance,
-		html.EscapeString(expense.ConfidenceLevel), html.EscapeString(returnURL), options, html.EscapeString(returnURL))
+		html.EscapeString(expense.ConfidenceLevel), html.EscapeString(returnURL), options,
+		html.EscapeString(selfURL), html.EscapeString(returnURL))
+}
+
+// categoryFormMessage renders a success/error banner after an "Add a new
+// category" submission redirects back to the expense detail page.
+func categoryFormMessage(query url.Values) string {
+	if added := query.Get("category_added"); added != "" {
+		return fmt.Sprintf(`<p class="success-message">Category %q added. Select it above and save to apply it.</p>`, added)
+	}
+	switch query.Get("category_error") {
+	case "empty_name":
+		return `<p class="error-message">Category name cannot be empty.</p>`
+	case "duplicate":
+		return `<p class="error-message">A category with that name already exists.</p>`
+	case "failed":
+		return `<p class="error-message">Failed to add category.</p>`
+	default:
+		return ""
+	}
 }
 
 // renderSummaryStatistics renders the total/count/average/top-category widget shown

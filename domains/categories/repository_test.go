@@ -213,7 +213,8 @@ func TestGetNonExistentCategory(t *testing.T) {
 	}
 }
 
-// TestGetAllCategoriesOrder verifies that categories are returned in ID order
+// TestGetAllCategoriesOrder verifies that categories are returned alphabetically
+// by display name, regardless of insertion/ID order, so dropdowns are sorted.
 func TestGetAllCategoriesOrder(t *testing.T) {
 	db := setupCategoriesTestDB(t)
 	defer db.Close()
@@ -226,17 +227,13 @@ func TestGetAllCategoriesOrder(t *testing.T) {
 		t.Fatalf("GetAllCategories failed: %v", err)
 	}
 
-	// Verify categories are in ascending ID order
-	for i := 0; i < len(categories)-1; i++ {
-		if categories[i].ID >= categories[i+1].ID {
-			t.Errorf("Categories not in ascending ID order: %d >= %d", categories[i].ID, categories[i+1].ID)
-		}
+	wantOrder := []string{"Casa", "Deporte", "Médico", "Niños", "Ocio", "Suministros", "Supermercado"}
+	if len(categories) != len(wantOrder) {
+		t.Fatalf("expected %d categories, got %d", len(wantOrder), len(categories))
 	}
-
-	// Verify all IDs from 1 to 7
-	for i := 0; i < 7; i++ {
-		if categories[i].ID != i+1 {
-			t.Errorf("Expected ID %d at position %d, got %d", i+1, i, categories[i].ID)
+	for i, want := range wantOrder {
+		if categories[i].DisplayName != want {
+			t.Errorf("expected %q at position %d, got %q", want, i, categories[i].DisplayName)
 		}
 	}
 }

@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/ghab/red-numbers/domains/classification"
 )
 
 // Repository handles expense persistence.
@@ -110,6 +112,20 @@ func (r *Repository) BackfillFingerprints(ctx context.Context) error {
 	return nil
 }
 
+// BackfillIncomeCategory assigns incomeCategoryID to every stored expense with
+// a positive amount that isn't already in that category. It runs on every
+// startup (like the other backfills) so the income rule applies retroactively
+// to data imported before the rule existed.
+func (r *Repository) BackfillIncomeCategory(ctx context.Context, incomeCategoryID int64) (int64, error) {
+	result, err := r.db.ExecContext(ctx,
+		`UPDATE expenses SET category_id = ?, confidence_level = 'high' WHERE amount > 0 AND (category_id IS NULL OR category_id != ?)`,
+		incomeCategoryID, incomeCategoryID)
+	if err != nil {
+		return 0, fmt.Errorf("failed to backfill income category: %w", err)
+	}
+	return result.RowsAffected()
+}
+
 // DeleteAll removes all imported expenses and their audit entries.
 func (r *Repository) DeleteAll(ctx context.Context) error {
 	tx, err := r.db.BeginTx(ctx, nil)
@@ -154,29 +170,101 @@ func (r *Repository) GetByID(ctx context.Context, id int64) (*Expense, error) {
 	return &expense, nil
 }
 
-// UpdateCategory changes an expense category and records the correction.
-func (r *Repository) UpdateCategory(ctx context.Context, expenseID, categoryID int64) error {
+// ReclassifyResult summarizes the effect of re-classifying expenses that share
+// a description pattern with a just-corrected expense.
+type ReclassifyResult struct {
+	MatchedCount int // other expenses sharing the corrected expense's description pattern
+	ChangedCount int // of those, how many actually had their category changed
+}
+
+// UpdateCategory changes an expense's category, then re-classifies every other
+// stored expense that shares the same (normalized) description, so a single
+// correction fixes every occurrence of a recurring merchant/description.
+func (r *Repository) UpdateCategory(ctx context.Context, expenseID, categoryID int64) (ReclassifyResult, error) {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("failed to begin category update: %w", err)
+		return ReclassifyResult{}, fmt.Errorf("failed to begin category update: %w", err)
 	}
 	defer tx.Rollback()
 
+	var description string
 	var oldCategory sql.NullInt64
-	if err := tx.QueryRowContext(ctx, `SELECT category_id FROM expenses WHERE id = ?`, expenseID).Scan(&oldCategory); err != nil {
-		return fmt.Errorf("failed to load current category: %w", err)
+	if err := tx.QueryRowContext(ctx, `SELECT description, category_id FROM expenses WHERE id = ?`, expenseID).Scan(&description, &oldCategory); err != nil {
+		return ReclassifyResult{}, fmt.Errorf("failed to load current category: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE expenses SET category_id = ?, confidence_level = 'high', corrected_at = CURRENT_TIMESTAMP WHERE id = ?`, categoryID, expenseID); err != nil {
-		return fmt.Errorf("failed to update expense category: %w", err)
+		return ReclassifyResult{}, fmt.Errorf("failed to update expense category: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO audit_log (action, expense_id, old_value, new_value, details) VALUES (?, ?, ?, ?, ?)`,
 		"category_correction", expenseID, nullableIntString(oldCategory), fmt.Sprint(categoryID), "manual category correction"); err != nil {
-		return fmt.Errorf("failed to log category correction: %w", err)
+		return ReclassifyResult{}, fmt.Errorf("failed to log category correction: %w", err)
 	}
+
+	result, err := reclassifySimilarExpenses(ctx, tx, expenseID, description, categoryID)
+	if err != nil {
+		return ReclassifyResult{}, err
+	}
+
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("failed to commit category update: %w", err)
+		return ReclassifyResult{}, fmt.Errorf("failed to commit category update: %w", err)
 	}
-	return nil
+	return result, nil
+}
+
+// reclassifySimilarExpenses finds every other expense whose description
+// normalizes the same way as excludeID's, and updates any that don't already
+// have categoryID. Matching happens in Go (not SQL) because normalization
+// strips accents and collapses whitespace.
+func reclassifySimilarExpenses(ctx context.Context, tx *sql.Tx, excludeID int64, description string, categoryID int64) (ReclassifyResult, error) {
+	normalizedTarget := classification.NormalizeDescription(description)
+
+	rows, err := tx.QueryContext(ctx, `SELECT id, description, amount, category_id FROM expenses WHERE id != ?`, excludeID)
+	if err != nil {
+		return ReclassifyResult{}, fmt.Errorf("failed to find similar expenses: %w", err)
+	}
+	type candidate struct {
+		id         int64
+		categoryID sql.NullInt64
+	}
+	var matches []candidate
+	for rows.Next() {
+		var item candidate
+		var otherDescription string
+		var amount float64
+		if err := rows.Scan(&item.id, &otherDescription, &amount, &item.categoryID); err != nil {
+			rows.Close()
+			return ReclassifyResult{}, fmt.Errorf("failed to scan candidate expense: %w", err)
+		}
+		// Positive-amount expenses are always income, regardless of description
+		// pattern, so a description-based correction must never move them out.
+		if amount > 0 {
+			continue
+		}
+		if classification.NormalizeDescription(otherDescription) == normalizedTarget {
+			matches = append(matches, item)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return ReclassifyResult{}, fmt.Errorf("failed to iterate candidate expenses: %w", err)
+	}
+	rows.Close()
+
+	result := ReclassifyResult{MatchedCount: len(matches)}
+	for _, match := range matches {
+		if match.categoryID.Valid && match.categoryID.Int64 == categoryID {
+			continue
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE expenses SET category_id = ?, confidence_level = 'high', corrected_at = CURRENT_TIMESTAMP WHERE id = ?`, categoryID, match.id); err != nil {
+			return ReclassifyResult{}, fmt.Errorf("failed to re-classify similar expense: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO audit_log (action, expense_id, old_value, new_value, details) VALUES (?, ?, ?, ?, ?)`,
+			"re_classification", match.id, nullableIntString(match.categoryID), fmt.Sprint(categoryID), "auto re-classified: matches corrected expense description"); err != nil {
+			return ReclassifyResult{}, fmt.Errorf("failed to log re-classification: %w", err)
+		}
+		result.ChangedCount++
+	}
+	return result, nil
 }
 
 func nullableIntString(value sql.NullInt64) string {

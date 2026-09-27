@@ -20,7 +20,7 @@ func TestFuzzyClassifierMatchesCategories(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		result := classifier.Classify(test.description)
+		result := classifier.Classify(test.description, -1)
 		if result.CategoryName != test.category || result.Confidence != test.confidence {
 			t.Errorf("Classify(%q) = %+v, want category %q confidence %q", test.description, result, test.category, test.confidence)
 		}
@@ -29,7 +29,7 @@ func TestFuzzyClassifierMatchesCategories(t *testing.T) {
 
 func TestFuzzyClassifierUsesPriorityForOverlappingMatches(t *testing.T) {
 	classifier := NewClassifier()
-	result := classifier.Classify("CINE CASA")
+	result := classifier.Classify("CINE CASA", -1)
 	if result.CategoryName != "ocio" {
 		t.Fatalf("expected ocio to win by priority, got %+v", result)
 	}
@@ -37,8 +37,23 @@ func TestFuzzyClassifierUsesPriorityForOverlappingMatches(t *testing.T) {
 
 func TestFuzzyClassifierMatchesPartialKeywords(t *testing.T) {
 	classifier := NewClassifier()
-	result := classifier.Classify("supermercadona outlet")
+	result := classifier.Classify("supermercadona outlet", -1)
 	if result.CategoryName != "supermercado" || result.Confidence != "medium" {
 		t.Fatalf("expected medium-confidence partial match, got %+v", result)
+	}
+}
+
+func TestFuzzyClassifierAssignsIncomeForPositiveAmounts(t *testing.T) {
+	classifier := NewClassifier()
+	result := classifier.Classify("MERCADONA AVDA BALEARES", 100)
+	if result.CategoryName != "income" || result.Confidence != "high" {
+		t.Fatalf("expected income/high for positive amount regardless of description, got %+v", result)
+	}
+}
+
+func TestFuzzyClassifierIgnoresIncomeForZeroOrNegativeAmounts(t *testing.T) {
+	classifier := NewClassifier()
+	if result := classifier.Classify("Unknown merchant", 0); result.CategoryName == "income" {
+		t.Fatalf("expected zero amount to keep normal classification, got %+v", result)
 	}
 }

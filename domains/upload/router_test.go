@@ -55,6 +55,13 @@ func TestUploadEndpoint(t *testing.T) {
 			expectedStatus: http.StatusBadRequest,
 			expectedText:   "importe",
 		},
+		{
+			name: "positive amount classifies as income regardless of description",
+			csv: "fecha de operación;concepto;fecha valor;importe;saldo\n" +
+				"05/01/2026;Mercadona;05/01/2026;18,00;2.121,64\n",
+			expectedStatus: http.StatusOK,
+			expectedText:   "income",
+		},
 	}
 
 	for _, test := range tests {

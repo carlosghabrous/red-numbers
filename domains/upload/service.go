@@ -44,7 +44,7 @@ func (s *Service) ClassifyExpenses(ctx context.Context, expenseList []expenses.E
 	classifications := make([]classification.Classification, len(expenseList))
 	if s.categoryRepo == nil {
 		for index := range expenseList {
-			classifications[index] = s.classifier.Classify(expenseList[index].Description)
+			classifications[index] = s.classifier.Classify(expenseList[index].Description, expenseList[index].Amount)
 		}
 		return classifications, nil
 	}
@@ -59,7 +59,7 @@ func (s *Service) ClassifyExpenses(ctx context.Context, expenseList []expenses.E
 	}
 
 	for index := range expenseList {
-		result := s.classifier.Classify(expenseList[index].Description)
+		result := s.classifier.Classify(expenseList[index].Description, expenseList[index].Amount)
 		categoryID, exists := categoryIDs[result.CategoryName]
 		if !exists {
 			return nil, fmt.Errorf("category %q is not seeded", result.CategoryName)

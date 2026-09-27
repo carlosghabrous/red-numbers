@@ -50,13 +50,13 @@ Show total spending, count, average, top category
 Monthly breakdown by category as pie chart  
 **Test:** Dashboard shows pie chart with 7 segments
 
-### 🟣 Slice 10: Histograms (5-6 hrs)
-Weekly and monthly bar charts showing spending trends  
-**Test:** Dashboard shows weekly and monthly charts
-
-### ⚫ Slice 11: Re-Classification & Polish (6-7 hrs)
+### ⚫ Slice 10: Re-Classification & Polish (6-7 hrs)
 Auto-update when corrections made + full styling + tests  
 **Test:** Correct one expense → all similar ones update
+
+### 🟣 Slice 11: Histograms (5-6 hrs)
+Weekly and monthly bar charts showing spending trends  
+**Test:** Dashboard shows weekly and monthly charts
 
 ## Getting Started
 

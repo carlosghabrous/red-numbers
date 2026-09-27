@@ -22,6 +22,7 @@ func SeedDefaultCategories(ctx context.Context, db *sql.DB) error {
 		{"deporte", "Deporte"},
 		{"suministros", "Suministros"},
 		{"casa", "Casa"},
+		{"income", "Income"},
 	}
 
 	for _, cat := range categories {

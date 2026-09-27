@@ -303,8 +303,12 @@ func TestExpenseRepositoryUpdateCategory(t *testing.T) {
 	if err := repository.Create(context.Background(), &expense); err != nil {
 		t.Fatalf("Create failed: %v", err)
 	}
-	if err := repository.UpdateCategory(context.Background(), expense.ID, 2); err != nil {
+	result, err := repository.UpdateCategory(context.Background(), expense.ID, 2)
+	if err != nil {
 		t.Fatalf("UpdateCategory failed: %v", err)
+	}
+	if result.MatchedCount != 0 || result.ChangedCount != 0 {
+		t.Fatalf("expected no similar expenses, got %+v", result)
 	}
 	updated, err := repository.GetByID(context.Background(), expense.ID)
 	if err != nil || updated == nil || updated.CategoryID != 2 || updated.ConfidenceLevel != "high" {
@@ -313,6 +317,79 @@ func TestExpenseRepositoryUpdateCategory(t *testing.T) {
 	var action string
 	if err := db.QueryRow(`SELECT action FROM audit_log WHERE expense_id = ?`, expense.ID).Scan(&action); err != nil || action != "category_correction" {
 		t.Fatalf("expected correction audit entry, action=%q err=%v", action, err)
+	}
+}
+
+func TestExpenseRepositoryUpdateCategoryReclassifiesSimilarExpenses(t *testing.T) {
+	db := newExpenseTestDB(t)
+	repository := NewRepository(db)
+	baseDate := time.Now()
+	corrected := Expense{Date: baseDate, Description: "MERCADONA MADRID", Amount: -10, Balance: 1, ImportedAt: baseDate, CategoryID: 1}
+	similarAccented := Expense{Date: baseDate, Description: "Mercadóna  Madrid", Amount: -20, Balance: 1, ImportedAt: baseDate, CategoryID: 1}
+	alreadyCorrect := Expense{Date: baseDate, Description: "MERCADONA MADRID", Amount: -30, Balance: 1, ImportedAt: baseDate, CategoryID: 2}
+	unrelated := Expense{Date: baseDate, Description: "NETFLIX", Amount: -5, Balance: 1, ImportedAt: baseDate, CategoryID: 1}
+	for _, expense := range []*Expense{&corrected, &similarAccented, &alreadyCorrect, &unrelated} {
+		if err := repository.Create(context.Background(), expense); err != nil {
+			t.Fatalf("Create failed: %v", err)
+		}
+	}
+
+	result, err := repository.UpdateCategory(context.Background(), corrected.ID, 2)
+	if err != nil {
+		t.Fatalf("UpdateCategory failed: %v", err)
+	}
+	if result.MatchedCount != 2 || result.ChangedCount != 1 {
+		t.Fatalf("expected 2 matches (1 changed, 1 already correct), got %+v", result)
+	}
+
+	updatedSimilar, err := repository.GetByID(context.Background(), similarAccented.ID)
+	if err != nil || updatedSimilar == nil || updatedSimilar.CategoryID != 2 || updatedSimilar.ConfidenceLevel != "high" {
+		t.Fatalf("expected similar expense to be re-classified, got %+v err=%v", updatedSimilar, err)
+	}
+	untouchedUnrelated, err := repository.GetByID(context.Background(), unrelated.ID)
+	if err != nil || untouchedUnrelated == nil || untouchedUnrelated.CategoryID != 1 {
+		t.Fatalf("expected unrelated expense to keep its category, got %+v err=%v", untouchedUnrelated, err)
+	}
+	var reclassifiedCount int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM audit_log WHERE action = 're_classification'`).Scan(&reclassifiedCount); err != nil || reclassifiedCount != 1 {
+		t.Fatalf("expected one re_classification audit entry, got count=%d err=%v", reclassifiedCount, err)
+	}
+}
+
+func TestExpenseRepositoryBackfillIncomeCategory(t *testing.T) {
+	db := newExpenseTestDB(t)
+	repository := NewRepository(db)
+	baseDate := time.Now()
+	positive := Expense{Date: baseDate, Description: "Salary", Amount: 1500, Balance: 1, CategoryID: 1, ImportedAt: baseDate}
+	alreadyIncome := Expense{Date: baseDate, Description: "Refund", Amount: 20, Balance: 1, CategoryID: 3, ImportedAt: baseDate}
+	negative := Expense{Date: baseDate, Description: "Rent", Amount: -50, Balance: 1, CategoryID: 1, ImportedAt: baseDate}
+	for _, expense := range []*Expense{&positive, &alreadyIncome, &negative} {
+		if err := repository.Create(context.Background(), expense); err != nil {
+			t.Fatalf("Create failed: %v", err)
+		}
+	}
+	const incomeCategoryID = int64(3)
+
+	changed, err := repository.BackfillIncomeCategory(context.Background(), incomeCategoryID)
+	if err != nil {
+		t.Fatalf("BackfillIncomeCategory failed: %v", err)
+	}
+	if changed != 1 {
+		t.Fatalf("expected exactly 1 row changed, got %d", changed)
+	}
+
+	updatedPositive, err := repository.GetByID(context.Background(), positive.ID)
+	if err != nil || updatedPositive == nil || updatedPositive.CategoryID != incomeCategoryID {
+		t.Fatalf("expected positive expense moved to income, got %+v err=%v", updatedPositive, err)
+	}
+	untouchedNegative, err := repository.GetByID(context.Background(), negative.ID)
+	if err != nil || untouchedNegative == nil || untouchedNegative.CategoryID != 1 {
+		t.Fatalf("expected negative expense untouched, got %+v err=%v", untouchedNegative, err)
+	}
+
+	secondRun, err := repository.BackfillIncomeCategory(context.Background(), incomeCategoryID)
+	if err != nil || secondRun != 0 {
+		t.Fatalf("expected idempotent second run to change nothing, got count=%d err=%v", secondRun, err)
 	}
 }
 

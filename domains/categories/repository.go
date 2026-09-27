@@ -15,12 +15,14 @@ func NewRepository(db *sql.DB) *Repository {
 	return &Repository{db: db}
 }
 
-// GetAllCategories returns all categories from the database.
+// GetAllCategories returns all categories from the database, alphabetically
+// by display name (used to populate both the category correction dropdown
+// and the dashboard category filter).
 func (r *Repository) GetAllCategories(ctx context.Context) ([]Category, error) {
 	query := `
 		SELECT id, name, display_name, created_at
 		FROM categories
-		ORDER BY id ASC
+		ORDER BY display_name COLLATE NOCASE ASC
 	`
 
 	rows, err := r.db.QueryContext(ctx, query)

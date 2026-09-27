@@ -28,8 +28,24 @@ func NewClassifier() *Classifier {
 	return &Classifier{rules: classificationRules}
 }
 
-// Classify returns the best matching category and confidence level.
-func (c *Classifier) Classify(description string) Classification {
+// NormalizeDescription exposes the classifier's description normalization
+// (lowercasing, accent stripping, whitespace collapsing) so other domains can
+// compare descriptions the same way the classifier does.
+func NormalizeDescription(value string) string {
+	return normalizeDescription(value)
+}
+
+// incomeCategory is assigned unconditionally to any expense with a positive
+// amount, bypassing keyword matching entirely: a positive amount is money
+// coming in, not a categorizable purchase.
+const incomeCategory = "income"
+
+// Classify returns the best matching category and confidence level. Expenses
+// with a positive amount are always classified as income.
+func (c *Classifier) Classify(description string, amount float64) Classification {
+	if amount > 0 {
+		return Classification{CategoryName: incomeCategory, Confidence: "high"}
+	}
 	normalized := normalizeDescription(description)
 	best := Classification{CategoryName: "supermercado", Confidence: "low"}
 	bestScore := 0.0

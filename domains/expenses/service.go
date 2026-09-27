@@ -80,19 +80,21 @@ func (s *Service) GetExpenseDetail(ctx context.Context, id int64) (*Expense, []c
 	return expense, categoryList, nil
 }
 
-// UpdateCategory validates the target category and applies the correction.
-func (s *Service) UpdateCategory(ctx context.Context, expenseID, categoryID int64) error {
+// UpdateCategory validates the target category, applies the correction, and
+// re-classifies every other expense with a matching description.
+func (s *Service) UpdateCategory(ctx context.Context, expenseID, categoryID int64) (ReclassifyResult, error) {
 	category, err := s.categories.GetByID(ctx, int(categoryID))
 	if err != nil {
-		return fmt.Errorf("failed to validate category: %w", err)
+		return ReclassifyResult{}, fmt.Errorf("failed to validate category: %w", err)
 	}
 	if category == nil {
-		return errInvalidCategory
+		return ReclassifyResult{}, errInvalidCategory
 	}
-	if err := s.expenses.UpdateCategory(ctx, expenseID, categoryID); err != nil {
-		return fmt.Errorf("failed to update category: %w", err)
+	result, err := s.expenses.UpdateCategory(ctx, expenseID, categoryID)
+	if err != nil {
+		return ReclassifyResult{}, fmt.Errorf("failed to update category: %w", err)
 	}
-	return nil
+	return result, nil
 }
 
 // DeleteAll removes every imported expense.

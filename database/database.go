@@ -75,6 +75,10 @@ func Initialize(ctx context.Context, config Config, logger *slog.Logger) (*sql.D
 		db.Close()
 		return nil, err
 	}
+	if err := backfillIncomeCategory(ctx, db, logger); err != nil {
+		db.Close()
+		return nil, err
+	}
 
 	// Log migration completion
 	count, err := migrationManager.GetAppliedMigrationCount(ctx)
@@ -85,6 +89,29 @@ func Initialize(ctx context.Context, config Config, logger *slog.Logger) (*sql.D
 	}
 
 	return db, nil
+}
+
+// backfillIncomeCategory moves every existing positive-amount expense into the
+// "income" category, so the rule applies to data imported before it existed.
+func backfillIncomeCategory(ctx context.Context, db *sql.DB, logger *slog.Logger) error {
+	incomeCategory, err := categories.NewRepository(db).GetByName(ctx, "income")
+	if err != nil {
+		logger.Error("failed to look up the income category", "error", err)
+		return err
+	}
+	if incomeCategory == nil {
+		logger.Warn("income category not seeded; skipping income backfill")
+		return nil
+	}
+	changed, err := expenses.NewRepository(db).BackfillIncomeCategory(ctx, int64(incomeCategory.ID))
+	if err != nil {
+		logger.Error("failed to backfill income category", "error", err)
+		return err
+	}
+	if changed > 0 {
+		logger.Info("backfilled income category for positive-amount expenses", "count", changed)
+	}
+	return nil
 }
 
 // Close closes the database connection.

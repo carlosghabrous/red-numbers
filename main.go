@@ -111,12 +111,14 @@ func main() {
 	classifier := classification.NewClassifier()
 	classificationService := classification.NewService(classificationRepo)
 	expenseService := expenses.NewService(expenseRepo, categoryRepo)
+	categoryService := categories.NewService(categoryRepo)
 	uploadService := upload.NewService(logger, upload.NewCSVParser(), classifier, expenseRepo, categoryRepo, classificationRepo)
 
 	// One handler per domain.
 	uploadHandler := upload.NewHandler(deps, uploadService)
 	expenseHandler := expenses.NewHandler(deps, expenseService)
 	classificationHandler := classification.NewHandler(deps, classificationService)
+	categoryHandler := categories.NewHandler(deps, categoryService)
 
 	// Create HTTP router
 	mux := http.NewServeMux()
@@ -139,6 +141,8 @@ func main() {
 	mux.HandleFunc("POST /upload", uploadHandler.HandlePostUpload)
 
 	mux.HandleFunc("GET /classification-log", classificationHandler.HandleGetClassificationLog)
+
+	mux.HandleFunc("POST /categories", categoryHandler.HandlePostCreate)
 
 	// Create HTTP server with reasonable timeouts
 	server := &http.Server{
