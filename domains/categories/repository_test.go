@@ -256,13 +256,13 @@ func TestCategoryFieldValues(t *testing.T) {
 		name        string
 		displayName string
 	}{
-		{1, "supermercado", "Supermercado"},
+		{7, "casa", "Casa"},
+		{5, "deporte", "Deporte"},
 		{2, "medico", "Médico"},
 		{3, "niños", "Niños"},
 		{4, "ocio", "Ocio"},
-		{5, "deporte", "Deporte"},
 		{6, "suministros", "Suministros"},
-		{7, "casa", "Casa"},
+		{1, "supermercado", "Supermercado"},
 	}
 
 	for i, expected := range expectedData {
