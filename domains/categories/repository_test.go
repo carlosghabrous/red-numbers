@@ -1,4 +1,4 @@
-package repositories
+package categories
 
 import (
 	"context"
@@ -48,7 +48,7 @@ func TestGetAllCategories(t *testing.T) {
 	db := setupCategoriesTestDB(t)
 	defer db.Close()
 
-	repo := NewCategoryRepository(db)
+	repo := NewRepository(db)
 	ctx := context.Background()
 
 	// Get all categories
@@ -102,7 +102,7 @@ func TestGetByID(t *testing.T) {
 	db := setupCategoriesTestDB(t)
 	defer db.Close()
 
-	repo := NewCategoryRepository(db)
+	repo := NewRepository(db)
 	ctx := context.Background()
 
 	// Get category by ID
@@ -125,7 +125,7 @@ func TestGetByName(t *testing.T) {
 	db := setupCategoriesTestDB(t)
 	defer db.Close()
 
-	repo := NewCategoryRepository(db)
+	repo := NewRepository(db)
 	ctx := context.Background()
 
 	// Get category by name
@@ -148,7 +148,7 @@ func TestCategoriesIdempotent(t *testing.T) {
 	db := setupCategoriesTestDB(t)
 	defer db.Close()
 
-	repo := NewCategoryRepository(db)
+	repo := NewRepository(db)
 	ctx := context.Background()
 
 	// Get categories first time
@@ -199,7 +199,7 @@ func TestGetNonExistentCategory(t *testing.T) {
 	db := setupCategoriesTestDB(t)
 	defer db.Close()
 
-	repo := NewCategoryRepository(db)
+	repo := NewRepository(db)
 	ctx := context.Background()
 
 	// Try to get non-existent category
@@ -218,7 +218,7 @@ func TestGetAllCategoriesOrder(t *testing.T) {
 	db := setupCategoriesTestDB(t)
 	defer db.Close()
 
-	repo := NewCategoryRepository(db)
+	repo := NewRepository(db)
 	ctx := context.Background()
 
 	categories, err := repo.GetAllCategories(ctx)
@@ -246,7 +246,7 @@ func TestCategoryFieldValues(t *testing.T) {
 	db := setupCategoriesTestDB(t)
 	defer db.Close()
 
-	repo := NewCategoryRepository(db)
+	repo := NewRepository(db)
 	ctx := context.Background()
 
 	categories, err := repo.GetAllCategories(ctx)

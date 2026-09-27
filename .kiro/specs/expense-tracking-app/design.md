@@ -1,5 +1,28 @@
 # Expense Tracking Application - Technical Design
 
+## Design Philosophy: Domain-Oriented Code Organization
+
+This is a general architecture approach worth reusing across projects, independent of language or framework. Organize code by **domain/feature**, not by technical layer (no top-level `handlers/`, `models/`, `services/`, `repositories/` grab-bags spanning unrelated features).
+
+Each domain gets its own folder (e.g. `domains/<name>/`) containing only the files it actually needs:
+
+- **`router.go`** — the HTTP/API endpoint implementations. Parses the request, calls the service, renders the response. No business logic, no direct data access.
+- **`service.go`** — coordinates actions and pulls data from one or more sources (database, other services, external APIs) to fulfill a request from the router. This is where business/orchestration logic lives.
+- **`repository.go`** — the sole abstraction for reading/writing a domain's data (e.g. to a database). Hides SQL/storage details behind Go methods; nothing outside the domain touches persistence directly.
+- **`models.go`** — structs mapping persisted records (the domain's "nouns").
+- **`schemas.go`** — structs that parse and validate incoming request data (query params, form fields, cookies) into typed, validated values before they reach the service. This is the equivalent of a Pydantic schema layer in a Python API: a boundary that keeps invalid input from leaking into business logic.
+
+Not every domain needs every file — a domain with no HTTP surface (e.g. a lookup table) may only need `models.go` and `repository.go`; a domain with no request-side validation to speak of can skip `schemas.go`. Add files when they earn their keep, not to satisfy the template.
+
+**Dependency injection over internal construction:**
+- Handlers/routers never construct their own services or repositories. Services and repositories are built once, in one composition root (e.g. `main.go`), and passed into handler constructors.
+- This makes dependencies explicit and swappable — tests can inject fakes/in-memory implementations instead of real ones, and swapping an implementation never requires touching the handler's code, only the wiring in the composition root.
+- Handler constructors take a small shared "dependencies" struct (logger, config, etc.) instead of an ad-hoc, growing list of positional parameters. Adding a new cross-cutting concern later (metrics, tracing, feature flags) means adding one field to that struct, not changing every constructor's signature.
+
+**Boundaries between domains:**
+- A domain may depend on another domain's exported API (e.g. an `upload` domain reading from an `expenses` repository), but dependencies should point one way — avoid cycles.
+- Shared infrastructure that isn't itself a business domain (DB connection setup, migrations, schema verification) lives in its own infra package (e.g. `database/`), separate from domain folders.
+
 ## Overview
 
 The Expense Tracking Application is a server-side rendered web application that enables users to upload Spanish-language bank export CSV files, automatically categorize expenses using fuzzy logic, review and correct categorizations, and visualize spending patterns through interactive charts and filtering options.

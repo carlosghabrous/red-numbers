@@ -1,4 +1,4 @@
-package services
+package upload
 
 import (
 	"encoding/csv"
@@ -8,29 +8,29 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ghab/red-numbers/models"
+	"github.com/ghab/red-numbers/domains/expenses"
 )
 
-// CSVParser handles parsing and validation of CSV files
+// CSVParser handles parsing and validation of CSV files.
 type CSVParser struct{}
 
-// NewCSVParser creates a new CSV parser
+// NewCSVParser creates a new CSV parser.
 func NewCSVParser() *CSVParser {
 	return &CSVParser{}
 }
 
-// RequiredColumns defines the columns that must be present in the CSV
+// RequiredColumns defines the columns that must be present in the CSV.
 var RequiredColumns = []string{"fecha de operación", "concepto", "fecha valor", "importe", "saldo"}
 
-// ParseCSVFile parses a CSV file and returns Expense objects
-// It validates headers and skips invalid rows, collecting errors for reporting
-func (p *CSVParser) ParseCSVFile(filePath string) ([]models.Expense, error) {
-	expenses, _, err := p.ParseCSVFileWithStats(filePath)
-	return expenses, err
+// ParseCSVFile parses a CSV file and returns Expense objects.
+// It validates headers and skips invalid rows, collecting errors for reporting.
+func (p *CSVParser) ParseCSVFile(filePath string) ([]expenses.Expense, error) {
+	parsed, _, err := p.ParseCSVFileWithStats(filePath)
+	return parsed, err
 }
 
 // ParseCSVFileWithStats parses a CSV file and reports rows skipped during parsing.
-func (p *CSVParser) ParseCSVFileWithStats(filePath string) ([]models.Expense, int, error) {
+func (p *CSVParser) ParseCSVFileWithStats(filePath string) ([]expenses.Expense, int, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to open CSV file: %w", err)
@@ -60,12 +60,9 @@ func (p *CSVParser) ParseCSVFileWithStats(filePath string) ([]models.Expense, in
 	}
 
 	// Parse data rows
-	expenses := make([]models.Expense, 0)
+	parsed := make([]expenses.Expense, 0)
 	skippedRows := 0
 	for rowIdx := headerIdx + 1; rowIdx < len(records); rowIdx++ {
-		// This is a row
-		// [  05/01/2026 R/ EDUCARTE PROYECTOS FORMATIVOS SL 05/01/2026 -18,00 2.121,64                    ]
-
 		row := records[rowIdx]
 
 		// Skip empty rows
@@ -81,10 +78,10 @@ func (p *CSVParser) ParseCSVFileWithStats(filePath string) ([]models.Expense, in
 			continue
 		}
 
-		expenses = append(expenses, *expense)
+		parsed = append(parsed, *expense)
 	}
 
-	return expenses, skippedRows, nil
+	return parsed, skippedRows, nil
 }
 
 func (p *CSVParser) findHeaderRow(records [][]string) (int, map[string]int, error) {
@@ -100,7 +97,7 @@ func (p *CSVParser) findHeaderRow(records [][]string) (int, map[string]int, erro
 	return 0, nil, lastErr
 }
 
-// validateHeaders checks that all required columns are present and returns a column index map
+// validateHeaders checks that all required columns are present and returns a column index map.
 func (p *CSVParser) validateHeaders(headers []string) (map[string]int, error) {
 	// Convert headers to lowercase for case-insensitive matching
 	lowerHeaders := make([]string, len(headers))
@@ -129,14 +126,14 @@ func (p *CSVParser) validateHeaders(headers []string) (map[string]int, error) {
 	return columnMap, nil
 }
 
-// parseRow extracts a CSV row into an Expense object
-func (p *CSVParser) parseRow(row []string, columnMap map[string]int) (*models.Expense, error) {
+// parseRow extracts a CSV row into an Expense object.
+func (p *CSVParser) parseRow(row []string, columnMap map[string]int) (*expenses.Expense, error) {
 	// Extract required columns
-	fechaIdx, _ := columnMap["fecha de operación"]
-	conceptoIdx, _ := columnMap["concepto"]
-	fechaValorIdx, _ := columnMap["fecha valor"]
-	importeIdx, _ := columnMap["importe"]
-	saldoIdx, _ := columnMap["saldo"]
+	fechaIdx := columnMap["fecha de operación"]
+	conceptoIdx := columnMap["concepto"]
+	fechaValorIdx := columnMap["fecha valor"]
+	importeIdx := columnMap["importe"]
+	saldoIdx := columnMap["saldo"]
 
 	// Validate column indices are within bounds
 	maxIdx := len(row)
@@ -178,7 +175,7 @@ func (p *CSVParser) parseRow(row []string, columnMap map[string]int) (*models.Ex
 		}
 	}
 
-	expense := &models.Expense{
+	expense := &expenses.Expense{
 		Date:        date,
 		Description: concepto,
 		Amount:      amount,
@@ -189,7 +186,7 @@ func (p *CSVParser) parseRow(row []string, columnMap map[string]int) (*models.Ex
 	return expense, nil
 }
 
-// parseDate parses a date string in either DD/MM/YYYY or DD-MM-YYYY format
+// parseDate parses a date string in either DD/MM/YYYY or DD-MM-YYYY format.
 func (p *CSVParser) parseDate(dateStr string) (time.Time, error) {
 	dateStr = strings.TrimSpace(dateStr)
 
@@ -206,8 +203,8 @@ func (p *CSVParser) parseDate(dateStr string) (time.Time, error) {
 	return time.Time{}, fmt.Errorf("date format not recognized: %s (expected DD/MM/YYYY or DD-MM-YYYY)", dateStr)
 }
 
-// parseAmount parses an amount string handling both comma and period decimal separators
-// Supports European format (1.234,56) and US format (1234.56)
+// parseAmount parses an amount string handling both comma and period decimal separators.
+// Supports European format (1.234,56) and US format (1234.56).
 func (p *CSVParser) parseAmount(amountStr string) (float64, error) {
 	amountStr = strings.TrimSpace(amountStr)
 	if amountStr == "" {

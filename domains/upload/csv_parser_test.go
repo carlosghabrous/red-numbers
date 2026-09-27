@@ -1,4 +1,4 @@
-package services
+package upload
 
 import (
 	"os"
@@ -97,6 +97,7 @@ func TestParseRowInvalidDate(t *testing.T) {
 	if len(expenses) != 0 {
 		t.Errorf("Expected 0 expenses for invalid row, got %d", len(expenses))
 	}
+	_ = err
 }
 
 func TestParseDateFormats(t *testing.T) {

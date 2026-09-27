@@ -1,4 +1,4 @@
-package repositories
+package expenses
 
 import (
 	"context"
@@ -7,34 +7,32 @@ import (
 	"fmt"
 	"strings"
 	"time"
-
-	"github.com/ghab/red-numbers/models"
 )
 
-// ExpenseRepository handles expense persistence.
-type ExpenseRepository struct {
+// Repository handles expense persistence.
+type Repository struct {
 	db *sql.DB
 }
 
-// NewExpenseRepository creates an expense repository backed by db.
-func NewExpenseRepository(db *sql.DB) *ExpenseRepository {
-	return &ExpenseRepository{db: db}
+// NewRepository creates an expense repository backed by db.
+func NewRepository(db *sql.DB) *Repository {
+	return &Repository{db: db}
 }
 
 // Create stores one expense and assigns its database ID.
-func (r *ExpenseRepository) Create(ctx context.Context, expense *models.Expense) error {
+func (r *Repository) Create(ctx context.Context, expense *Expense) error {
 	_, err := r.create(ctx, r.db, expense)
 	return err
 }
 
 // CreateBatch stores all expenses in one transaction.
-func (r *ExpenseRepository) CreateBatch(ctx context.Context, expenses []models.Expense) error {
+func (r *Repository) CreateBatch(ctx context.Context, expenses []Expense) error {
 	_, err := r.CreateBatchWithCount(ctx, expenses)
 	return err
 }
 
 // CreateBatchWithCount stores only new expenses and returns the inserted count.
-func (r *ExpenseRepository) CreateBatchWithCount(ctx context.Context, expenses []models.Expense) (int, error) {
+func (r *Repository) CreateBatchWithCount(ctx context.Context, expenses []Expense) (int, error) {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, fmt.Errorf("failed to begin expense transaction: %w", err)
@@ -59,12 +57,12 @@ func (r *ExpenseRepository) CreateBatchWithCount(ctx context.Context, expenses [
 }
 
 // GetAll returns all expenses ordered from newest to oldest.
-func (r *ExpenseRepository) GetAll(ctx context.Context) ([]models.Expense, error) {
+func (r *Repository) GetAll(ctx context.Context) ([]Expense, error) {
 	return r.GetByFilters(ctx, "date", "desc")
 }
 
 // BackfillFingerprints assigns fingerprints to records created before deduplication.
-func (r *ExpenseRepository) BackfillFingerprints(ctx context.Context) error {
+func (r *Repository) BackfillFingerprints(ctx context.Context) error {
 	rows, err := r.db.QueryContext(ctx, `SELECT id, date, description, amount, balance FROM expenses WHERE fingerprint IS NULL OR fingerprint = ''`)
 	if err != nil {
 		return fmt.Errorf("failed to find records without fingerprints: %w", err)
@@ -72,7 +70,7 @@ func (r *ExpenseRepository) BackfillFingerprints(ctx context.Context) error {
 	defer rows.Close()
 	type record struct {
 		id      int64
-		expense models.Expense
+		expense Expense
 	}
 	var records []record
 	for rows.Next() {
@@ -113,7 +111,7 @@ func (r *ExpenseRepository) BackfillFingerprints(ctx context.Context) error {
 }
 
 // DeleteAll removes all imported expenses and their audit entries.
-func (r *ExpenseRepository) DeleteAll(ctx context.Context) error {
+func (r *Repository) DeleteAll(ctx context.Context) error {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -129,12 +127,12 @@ func (r *ExpenseRepository) DeleteAll(ctx context.Context) error {
 }
 
 // GetByID returns one expense by database ID.
-func (r *ExpenseRepository) GetByID(ctx context.Context, id int64) (*models.Expense, error) {
+func (r *Repository) GetByID(ctx context.Context, id int64) (*Expense, error) {
 	const query = `
 		SELECT id, date, description, amount, balance, COALESCE(category_id, 0), fingerprint,
 		       confidence_level, imported_at, corrected_at
 		FROM expenses WHERE id = ?`
-	var expense models.Expense
+	var expense Expense
 	var correctedAt sql.NullTime
 	var fingerprint sql.NullString
 	err := r.db.QueryRowContext(ctx, query, id).Scan(
@@ -157,7 +155,7 @@ func (r *ExpenseRepository) GetByID(ctx context.Context, id int64) (*models.Expe
 }
 
 // UpdateCategory changes an expense category and records the correction.
-func (r *ExpenseRepository) UpdateCategory(ctx context.Context, expenseID, categoryID int64) error {
+func (r *Repository) UpdateCategory(ctx context.Context, expenseID, categoryID int64) error {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("failed to begin category update: %w", err)
@@ -189,12 +187,12 @@ func nullableIntString(value sql.NullInt64) string {
 }
 
 // GetByFilters returns expenses sorted by a supported field and direction.
-func (r *ExpenseRepository) GetByFilters(ctx context.Context, sortBy, sortDirection string) ([]models.Expense, error) {
-	return r.GetByFilterOptions(ctx, ExpenseFilterOptions{SortBy: sortBy, SortDirection: sortDirection})
+func (r *Repository) GetByFilters(ctx context.Context, sortBy, sortDirection string) ([]Expense, error) {
+	return r.GetByFilterOptions(ctx, FilterOptions{SortBy: sortBy, SortDirection: sortDirection})
 }
 
-// ExpenseFilterOptions contains the dashboard sorting and filtering options.
-type ExpenseFilterOptions struct {
+// FilterOptions contains the dashboard sorting and filtering options.
+type FilterOptions struct {
 	SortBy        string
 	SortDirection string
 	CategoryIDs   []int64
@@ -205,7 +203,7 @@ type ExpenseFilterOptions struct {
 }
 
 // GetByFilterOptions returns expenses matching category/date filters and sorting.
-func (r *ExpenseRepository) GetByFilterOptions(ctx context.Context, options ExpenseFilterOptions) ([]models.Expense, error) {
+func (r *Repository) GetByFilterOptions(ctx context.Context, options FilterOptions) ([]Expense, error) {
 	sortBy := options.SortBy
 	sortDirection := options.SortDirection
 	sortExpressions := map[string]string{
@@ -269,9 +267,9 @@ func (r *ExpenseRepository) GetByFilterOptions(ctx context.Context, options Expe
 	}
 	defer rows.Close()
 
-	expenses := make([]models.Expense, 0)
+	expenses := make([]Expense, 0)
 	for rows.Next() {
-		var expense models.Expense
+		var expense Expense
 		if err := rows.Scan(
 			&expense.ID,
 			&expense.Date,
@@ -295,11 +293,8 @@ func (r *ExpenseRepository) GetByFilterOptions(ctx context.Context, options Expe
 }
 
 // CountByFilterOptions returns the number of expenses matching the filters.
-func (r *ExpenseRepository) CountByFilterOptions(ctx context.Context, options ExpenseFilterOptions) (int, error) {
+func (r *Repository) CountByFilterOptions(ctx context.Context, options FilterOptions) (int, error) {
 	fromClause := "expenses e"
-	if len(options.CategoryIDs) > 0 {
-		fromClause += ""
-	}
 	conditions := make([]string, 0, 2)
 	args := make([]any, 0, len(options.CategoryIDs)+2)
 	if len(options.CategoryIDs) > 0 {
@@ -336,64 +331,12 @@ func max(first, second int) int {
 	return second
 }
 
-// LogClassification records an automatic classification decision in the audit log.
-func (r *ExpenseRepository) LogClassification(ctx context.Context, expense models.Expense, classification ClassificationLog) error {
-	const query = `
-		INSERT INTO audit_log (action, expense_id, new_value, details)
-		VALUES (?, ?, ?, ?)`
-	_, err := r.db.ExecContext(ctx, query, "classification", expense.ID, classification.CategoryName,
-		fmt.Sprintf("pattern=%s;confidence=%s", classification.Pattern, classification.Confidence))
-	return err
-}
-
-// ClassificationLog contains the audit fields for an automatic classification.
-type ClassificationLog struct {
-	CategoryName string
-	Pattern      string
-	Confidence   string
-}
-
-// ClassificationLogEntry represents one persisted classification decision.
-type ClassificationLogEntry struct {
-	Timestamp    time.Time
-	ExpenseID    int64
-	CategoryName string
-	Details      string
-}
-
-// GetClassificationLogs returns recent automatic classification decisions.
-func (r *ExpenseRepository) GetClassificationLogs(ctx context.Context) ([]ClassificationLogEntry, error) {
-	const query = `
-		SELECT timestamp, expense_id, new_value, details
-		FROM audit_log
-		WHERE action = ?
-		ORDER BY timestamp DESC, id DESC`
-	rows, err := r.db.QueryContext(ctx, query, "classification")
-	if err != nil {
-		return nil, fmt.Errorf("failed to query classification logs: %w", err)
-	}
-	defer rows.Close()
-
-	logs := make([]ClassificationLogEntry, 0)
-	for rows.Next() {
-		var entry ClassificationLogEntry
-		if err := rows.Scan(&entry.Timestamp, &entry.ExpenseID, &entry.CategoryName, &entry.Details); err != nil {
-			return nil, fmt.Errorf("failed to scan classification log: %w", err)
-		}
-		logs = append(logs, entry)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("failed to iterate classification logs: %w", err)
-	}
-	return logs, nil
-}
-
 type expenseWriter interface {
 	ExecContext(context.Context, string, ...any) (sql.Result, error)
 	QueryRowContext(context.Context, string, ...any) *sql.Row
 }
 
-func (r *ExpenseRepository) create(ctx context.Context, writer expenseWriter, expense *models.Expense) (bool, error) {
+func (r *Repository) create(ctx context.Context, writer expenseWriter, expense *Expense) (bool, error) {
 	if expense.Fingerprint == "" {
 		expense.Fingerprint = fingerprintForExpense(*expense)
 	}
@@ -433,7 +376,7 @@ func (r *ExpenseRepository) create(ctx context.Context, writer expenseWriter, ex
 	return true, err
 }
 
-func fingerprintForExpense(expense models.Expense) string {
+func fingerprintForExpense(expense Expense) string {
 	value := fmt.Sprintf("%s\x00%s\x00%.17g\x00%.17g", expense.Date.Format("2006-01-02"), expense.Description, expense.Amount, expense.Balance)
 	hash := sha256.Sum256([]byte(value))
 	return fmt.Sprintf("%x", hash[:])

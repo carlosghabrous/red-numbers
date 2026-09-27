@@ -1,4 +1,6 @@
-package repositories
+// Package database wires up the SQLite connection, migrations, and seed data
+// shared by every domain. It is infrastructure, not a business domain.
+package database
 
 import (
 	"context"
@@ -7,19 +9,21 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/ghab/red-numbers/domains/categories"
+	"github.com/ghab/red-numbers/domains/expenses"
 	_ "github.com/mattn/go-sqlite3"
 )
 
-// DatabaseConfig holds database connection configuration
-type DatabaseConfig struct {
+// Config holds database connection configuration.
+type Config struct {
 	DBPath             string
 	MaxOpenConnections int
 	MaxIdleConnections int
 	ConnMaxLifetime    time.Duration
 }
 
-// InitializeDatabase creates a new SQLite database connection, applies migrations, and returns the connection
-func InitializeDatabase(ctx context.Context, config DatabaseConfig, logger *slog.Logger) (*sql.DB, error) {
+// Initialize creates a new SQLite database connection, applies migrations, and returns the connection.
+func Initialize(ctx context.Context, config Config, logger *slog.Logger) (*sql.DB, error) {
 	// Set defaults if not provided
 	if config.MaxOpenConnections == 0 {
 		config.MaxOpenConnections = 10
@@ -61,12 +65,12 @@ func InitializeDatabase(ctx context.Context, config DatabaseConfig, logger *slog
 		db.Close()
 		return nil, err
 	}
-	if err := SeedDefaultCategories(ctx, db); err != nil {
+	if err := categories.SeedDefaultCategories(ctx, db); err != nil {
 		logger.Error("failed to seed default categories", "error", err)
 		db.Close()
 		return nil, err
 	}
-	if err := NewExpenseRepository(db).BackfillFingerprints(ctx); err != nil {
+	if err := expenses.NewRepository(db).BackfillFingerprints(ctx); err != nil {
 		logger.Error("failed to backfill expense fingerprints", "error", err)
 		db.Close()
 		return nil, err
@@ -83,8 +87,8 @@ func InitializeDatabase(ctx context.Context, config DatabaseConfig, logger *slog
 	return db, nil
 }
 
-// CloseDatabase closes the database connection
-func CloseDatabase(db *sql.DB, logger *slog.Logger) error {
+// Close closes the database connection.
+func Close(db *sql.DB, logger *slog.Logger) error {
 	if db == nil {
 		return nil
 	}

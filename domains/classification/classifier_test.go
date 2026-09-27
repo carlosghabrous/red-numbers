@@ -1,9 +1,9 @@
-package services
+package classification
 
 import "testing"
 
 func TestFuzzyClassifierMatchesCategories(t *testing.T) {
-	classifier := NewFuzzyClassifierService()
+	classifier := NewClassifier()
 	tests := []struct {
 		description string
 		category    string
@@ -28,7 +28,7 @@ func TestFuzzyClassifierMatchesCategories(t *testing.T) {
 }
 
 func TestFuzzyClassifierUsesPriorityForOverlappingMatches(t *testing.T) {
-	classifier := NewFuzzyClassifierService()
+	classifier := NewClassifier()
 	result := classifier.Classify("CINE CASA")
 	if result.CategoryName != "ocio" {
 		t.Fatalf("expected ocio to win by priority, got %+v", result)
@@ -36,7 +36,7 @@ func TestFuzzyClassifierUsesPriorityForOverlappingMatches(t *testing.T) {
 }
 
 func TestFuzzyClassifierMatchesPartialKeywords(t *testing.T) {
-	classifier := NewFuzzyClassifierService()
+	classifier := NewClassifier()
 	result := classifier.Classify("supermercadona outlet")
 	if result.CategoryName != "supermercado" || result.Confidence != "medium" {
 		t.Fatalf("expected medium-confidence partial match, got %+v", result)

@@ -9,8 +9,12 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/ghab/red-numbers/handlers"
-	"github.com/ghab/red-numbers/repositories"
+	"github.com/ghab/red-numbers/database"
+	"github.com/ghab/red-numbers/domains/categories"
+	"github.com/ghab/red-numbers/domains/classification"
+	"github.com/ghab/red-numbers/domains/expenses"
+	"github.com/ghab/red-numbers/domains/upload"
+	"github.com/ghab/red-numbers/platform"
 )
 
 // Config holds application configuration from environment variables
@@ -82,7 +86,7 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	db, err := repositories.InitializeDatabase(ctx, repositories.DatabaseConfig{
+	db, err := database.Initialize(ctx, database.Config{
 		DBPath:             config.DBPath,
 		MaxOpenConnections: 10,
 		MaxIdleConnections: 5,
@@ -92,13 +96,30 @@ func main() {
 		logger.Error("Failed to initialize database", slog.String("error", err.Error()))
 		os.Exit(1)
 	}
-	defer repositories.CloseDatabase(db, logger)
+	defer database.Close(db, logger)
+
+	// Shared dependencies passed to every domain handler.
+	deps := platform.Dependencies{Logger: logger}
+
+	// Repositories: the abstraction each domain uses to read/write its data.
+	categoryRepo := categories.NewRepository(db)
+	expenseRepo := expenses.NewRepository(db)
+	classificationRepo := classification.NewRepository(db)
+
+	// Services: built once here and injected into handlers, rather than
+	// constructed inside the handlers themselves.
+	classifier := classification.NewClassifier()
+	classificationService := classification.NewService(classificationRepo)
+	expenseService := expenses.NewService(expenseRepo, categoryRepo)
+	uploadService := upload.NewService(logger, upload.NewCSVParser(), classifier, expenseRepo, categoryRepo, classificationRepo)
+
+	// One handler per domain.
+	uploadHandler := upload.NewHandler(deps, uploadService)
+	expenseHandler := expenses.NewHandler(deps, expenseService)
+	classificationHandler := classification.NewHandler(deps, classificationService)
 
 	// Create HTTP router
 	mux := http.NewServeMux()
-
-	// Create handlers
-	uploadHandler := handlers.NewUploadHandler(logger, db)
 
 	// Register basic health check endpoint
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
@@ -108,16 +129,16 @@ func main() {
 		fmt.Fprintf(w, `{"status":"ok","timestamp":"%s"}`, time.Now().Format(time.RFC3339))
 	})
 
-	// Register root endpoint
-	mux.HandleFunc("GET /", uploadHandler.HandleGetDashboard)
+	// Register domain routes
+	mux.HandleFunc("GET /", expenseHandler.HandleGetDashboard)
+	mux.HandleFunc("POST /expenses/delete-all", expenseHandler.HandlePostDeleteAll)
+	mux.HandleFunc("GET /expenses/{id}", expenseHandler.HandleGetExpenseDetail)
+	mux.HandleFunc("POST /expenses/{id}", expenseHandler.HandlePostExpenseDetail)
 
-	// Register upload routes
 	mux.HandleFunc("GET /upload", uploadHandler.HandleGetUpload)
 	mux.HandleFunc("POST /upload", uploadHandler.HandlePostUpload)
-	mux.HandleFunc("GET /classification-log", uploadHandler.HandleGetClassificationLog)
-	mux.HandleFunc("POST /expenses/delete-all", uploadHandler.HandlePostDeleteAll)
-	mux.HandleFunc("GET /expenses/{id}", uploadHandler.HandleGetExpenseDetail)
-	mux.HandleFunc("POST /expenses/{id}", uploadHandler.HandlePostExpenseDetail)
+
+	mux.HandleFunc("GET /classification-log", classificationHandler.HandleGetClassificationLog)
 
 	// Create HTTP server with reasonable timeouts
 	server := &http.Server{

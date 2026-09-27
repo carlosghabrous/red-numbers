@@ -1,4 +1,4 @@
-package repositories
+package database
 
 import (
 	"context"
@@ -12,20 +12,20 @@ import (
 	"time"
 )
 
-// MigrationManager handles database schema versioning and migration execution
+// MigrationManager handles database schema versioning and migration execution.
 type MigrationManager struct {
 	db             *sql.DB
 	logger         *slog.Logger
 	migrationsPath string
 }
 
-// Migration represents a single database schema migration
+// Migration represents a single database schema migration.
 type Migration struct {
 	Name    string
 	Content string
 }
 
-// NewMigrationManager creates a new migration manager
+// NewMigrationManager creates a new migration manager.
 func NewMigrationManager(db *sql.DB, logger *slog.Logger) *MigrationManager {
 	return &MigrationManager{
 		db:             db,
@@ -34,7 +34,7 @@ func NewMigrationManager(db *sql.DB, logger *slog.Logger) *MigrationManager {
 	}
 }
 
-// Initialize sets up the migration tracking table if it doesn't exist
+// Initialize sets up the migration tracking table if it doesn't exist.
 func (m *MigrationManager) Initialize(ctx context.Context) error {
 	query := `
 	CREATE TABLE IF NOT EXISTS _migrations (
@@ -53,7 +53,7 @@ func (m *MigrationManager) Initialize(ctx context.Context) error {
 	return nil
 }
 
-// ApplyMigrations executes all pending migrations in order
+// ApplyMigrations executes all pending migrations in order.
 func (m *MigrationManager) ApplyMigrations(ctx context.Context) error {
 	// Initialize migration tracking table
 	if err := m.Initialize(ctx); err != nil {
@@ -125,7 +125,7 @@ func (m *MigrationManager) ApplyMigrations(ctx context.Context) error {
 	return nil
 }
 
-// loadMigrations reads all SQL migration files from the filesystem
+// loadMigrations reads all SQL migration files from the filesystem.
 func (m *MigrationManager) loadMigrations() ([]Migration, error) {
 	var migrations []Migration
 
@@ -165,7 +165,7 @@ func (m *MigrationManager) loadMigrations() ([]Migration, error) {
 	return migrations, nil
 }
 
-// getAppliedMigrations returns a map of applied migration names
+// getAppliedMigrations returns a map of applied migration names.
 func (m *MigrationManager) getAppliedMigrations(ctx context.Context) (map[string]bool, error) {
 	applied := make(map[string]bool)
 
@@ -191,7 +191,7 @@ func (m *MigrationManager) getAppliedMigrations(ctx context.Context) (map[string
 	return applied, nil
 }
 
-// GetAppliedMigrationCount returns the number of applied migrations
+// GetAppliedMigrationCount returns the number of applied migrations.
 func (m *MigrationManager) GetAppliedMigrationCount(ctx context.Context) (int, error) {
 	var count int
 
@@ -201,21 +201,4 @@ func (m *MigrationManager) GetAppliedMigrationCount(ctx context.Context) (int, e
 	}
 
 	return count, nil
-}
-
-// GetLastAppliedMigration returns the name and timestamp of the last applied migration
-func (m *MigrationManager) GetLastAppliedMigration(ctx context.Context) (string, time.Time, error) {
-	var name string
-	var appliedAt time.Time
-
-	query := `SELECT name, applied_at FROM _migrations ORDER BY applied_at DESC LIMIT 1`
-	err := m.db.QueryRowContext(ctx, query).Scan(&name, &appliedAt)
-	if err == sql.ErrNoRows {
-		return "", time.Time{}, nil
-	}
-	if err != nil {
-		return "", time.Time{}, fmt.Errorf("failed to query last migration: %w", err)
-	}
-
-	return name, appliedAt, nil
 }

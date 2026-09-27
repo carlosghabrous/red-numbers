@@ -1,8 +1,8 @@
-package models
+package categories
 
 import "time"
 
-// Category represents an expense category
+// Category represents an expense category.
 type Category struct {
 	ID          int       `json:"id"`
 	Name        string    `json:"name"`

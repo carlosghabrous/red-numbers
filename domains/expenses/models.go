@@ -1,8 +1,8 @@
-package models
+package expenses
 
 import "time"
 
-// Expense represents a single transaction record
+// Expense represents a single transaction record.
 type Expense struct {
 	ID              int64      `json:"id"`
 	Date            time.Time  `json:"date"`

@@ -1,13 +1,6 @@
-package services
+package classification
 
 import "strings"
-
-// Classification is the result of classifying an expense description.
-type Classification struct {
-	CategoryName string
-	Pattern      string
-	Confidence   string
-}
 
 type classificationRule struct {
 	category string
@@ -25,18 +18,18 @@ var classificationRules = []classificationRule{
 	{category: "casa", priority: 7, keywords: []string{"alquiler", "renta", "casa", "volkswagen renting"}},
 }
 
-// FuzzyClassifierService assigns categories using the built-in keyword rules.
-type FuzzyClassifierService struct {
+// Classifier assigns categories using the built-in keyword rules.
+type Classifier struct {
 	rules []classificationRule
 }
 
-// NewFuzzyClassifierService creates a classifier with the default category rules.
-func NewFuzzyClassifierService() *FuzzyClassifierService {
-	return &FuzzyClassifierService{rules: classificationRules}
+// NewClassifier creates a classifier with the default category rules.
+func NewClassifier() *Classifier {
+	return &Classifier{rules: classificationRules}
 }
 
 // Classify returns the best matching category and confidence level.
-func (c *FuzzyClassifierService) Classify(description string) Classification {
+func (c *Classifier) Classify(description string) Classification {
 	normalized := normalizeDescription(description)
 	best := Classification{CategoryName: "supermercado", Confidence: "low"}
 	bestScore := 0.0

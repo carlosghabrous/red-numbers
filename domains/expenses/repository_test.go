@@ -1,4 +1,4 @@
-package repositories
+package expenses
 
 import (
 	"context"
@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ghab/red-numbers/models"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -60,14 +59,14 @@ func newExpenseTestDB(t *testing.T) *sql.DB {
 
 func TestExpenseRepositoryGetByFiltersSorting(t *testing.T) {
 	db := newExpenseTestDB(t)
-	repository := NewExpenseRepository(db)
+	repository := NewRepository(db)
 	baseDate := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
-	expenses := []models.Expense{
+	expenseList := []Expense{
 		{Date: baseDate.AddDate(0, 0, 2), Description: "Zeta", Amount: 20, Balance: 1, CategoryID: 1, ImportedAt: baseDate},
 		{Date: baseDate.AddDate(0, 0, 1), Description: "Alpha", Amount: 5, Balance: 1, CategoryID: 2, ImportedAt: baseDate},
 		{Date: baseDate, Description: "Beta", Amount: 10, Balance: 1, CategoryID: 1, ImportedAt: baseDate},
 	}
-	if err := repository.CreateBatch(context.Background(), expenses); err != nil {
+	if err := repository.CreateBatch(context.Background(), expenseList); err != nil {
 		t.Fatalf("CreateBatch failed: %v", err)
 	}
 
@@ -97,20 +96,20 @@ func TestExpenseRepositoryGetByFiltersSorting(t *testing.T) {
 
 func TestExpenseRepositoryGetByFilterOptions(t *testing.T) {
 	db := newExpenseTestDB(t)
-	repository := NewExpenseRepository(db)
+	repository := NewRepository(db)
 	baseDate := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
-	expenses := []models.Expense{
+	expenseList := []Expense{
 		{Date: baseDate, Description: "Casa", Amount: 30, Balance: 1, CategoryID: 1, ImportedAt: baseDate},
 		{Date: baseDate.AddDate(0, 0, 1), Description: "Ocio", Amount: 10, Balance: 1, CategoryID: 2, ImportedAt: baseDate},
 		{Date: baseDate.AddDate(0, 0, 2), Description: "Casa later", Amount: 20, Balance: 1, CategoryID: 1, ImportedAt: baseDate},
 	}
-	if err := repository.CreateBatch(context.Background(), expenses); err != nil {
+	if err := repository.CreateBatch(context.Background(), expenseList); err != nil {
 		t.Fatalf("CreateBatch failed: %v", err)
 	}
 
 	start := baseDate
 	end := baseDate.AddDate(0, 0, 2)
-	filtered, err := repository.GetByFilterOptions(context.Background(), ExpenseFilterOptions{
+	filtered, err := repository.GetByFilterOptions(context.Background(), FilterOptions{
 		SortBy: "date", SortDirection: "asc", CategoryIDs: []int64{1, 2}, StartDate: &start, EndDate: &end,
 	})
 	if err != nil {
@@ -120,7 +119,7 @@ func TestExpenseRepositoryGetByFilterOptions(t *testing.T) {
 		t.Fatalf("expected date-bounded results with OR category filter, got %+v", filtered)
 	}
 
-	filtered, err = repository.GetByFilterOptions(context.Background(), ExpenseFilterOptions{CategoryIDs: []int64{1}})
+	filtered, err = repository.GetByFilterOptions(context.Background(), FilterOptions{CategoryIDs: []int64{1}})
 	if err != nil {
 		t.Fatalf("single category filter failed: %v", err)
 	}
@@ -131,22 +130,22 @@ func TestExpenseRepositoryGetByFilterOptions(t *testing.T) {
 
 func TestExpenseRepositoryPagination(t *testing.T) {
 	db := newExpenseTestDB(t)
-	repository := NewExpenseRepository(db)
+	repository := NewRepository(db)
 	baseDate := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
 	for index := 0; index < 3; index++ {
-		expense := models.Expense{Date: baseDate.AddDate(0, 0, index), Description: fmt.Sprintf("Expense %d", index), Amount: float64(index), Balance: 1, ImportedAt: baseDate}
+		expense := Expense{Date: baseDate.AddDate(0, 0, index), Description: fmt.Sprintf("Expense %d", index), Amount: float64(index), Balance: 1, ImportedAt: baseDate}
 		if err := repository.Create(context.Background(), &expense); err != nil {
 			t.Fatalf("Create failed: %v", err)
 		}
 	}
-	page, err := repository.GetByFilterOptions(context.Background(), ExpenseFilterOptions{SortBy: "date", SortDirection: "asc", Limit: 2, Offset: 1})
+	page, err := repository.GetByFilterOptions(context.Background(), FilterOptions{SortBy: "date", SortDirection: "asc", Limit: 2, Offset: 1})
 	if err != nil {
 		t.Fatalf("GetByFilterOptions failed: %v", err)
 	}
 	if len(page) != 2 || page[0].Description != "Expense 1" || page[1].Description != "Expense 2" {
 		t.Fatalf("unexpected page results: %+v", page)
 	}
-	count, err := repository.CountByFilterOptions(context.Background(), ExpenseFilterOptions{})
+	count, err := repository.CountByFilterOptions(context.Background(), FilterOptions{})
 	if err != nil || count != 3 {
 		t.Fatalf("expected total count 3, got %d (err=%v)", count, err)
 	}
@@ -154,18 +153,18 @@ func TestExpenseRepositoryPagination(t *testing.T) {
 
 func TestExpenseRepositorySkipsDuplicateRecords(t *testing.T) {
 	db := newExpenseTestDB(t)
-	repository := NewExpenseRepository(db)
-	expense := models.Expense{Date: time.Date(2026, 1, 5, 12, 0, 0, 0, time.UTC), Description: "Repeated", Amount: 12.50, Balance: 100, ImportedAt: time.Now()}
-	inserted, err := repository.CreateBatchWithCount(context.Background(), []models.Expense{expense})
+	repository := NewRepository(db)
+	expense := Expense{Date: time.Date(2026, 1, 5, 12, 0, 0, 0, time.UTC), Description: "Repeated", Amount: 12.50, Balance: 100, ImportedAt: time.Now()}
+	inserted, err := repository.CreateBatchWithCount(context.Background(), []Expense{expense})
 	if err != nil || inserted != 1 {
 		t.Fatalf("expected first insert, got count=%d err=%v", inserted, err)
 	}
-	duplicate := models.Expense{Date: expense.Date, Description: expense.Description, Amount: expense.Amount, Balance: expense.Balance, ImportedAt: time.Now()}
-	inserted, err = repository.CreateBatchWithCount(context.Background(), []models.Expense{duplicate})
+	duplicate := Expense{Date: expense.Date, Description: expense.Description, Amount: expense.Amount, Balance: expense.Balance, ImportedAt: time.Now()}
+	inserted, err = repository.CreateBatchWithCount(context.Background(), []Expense{duplicate})
 	if err != nil || inserted != 0 {
 		t.Fatalf("expected duplicate to be skipped, got count=%d err=%v", inserted, err)
 	}
-	count, err := repository.CountByFilterOptions(context.Background(), ExpenseFilterOptions{})
+	count, err := repository.CountByFilterOptions(context.Background(), FilterOptions{})
 	if err != nil || count != 1 {
 		t.Fatalf("expected one stored expense, got count=%d err=%v", count, err)
 	}
@@ -173,17 +172,17 @@ func TestExpenseRepositorySkipsDuplicateRecords(t *testing.T) {
 
 func TestExpenseRepositoryDateFilterNormalizesStoredTimestamps(t *testing.T) {
 	db := newExpenseTestDB(t)
-	repository := NewExpenseRepository(db)
-	expenses := []models.Expense{
+	repository := NewRepository(db)
+	expenseList := []Expense{
 		{Date: time.Date(2026, 1, 31, 12, 0, 0, 0, time.UTC), Description: "January", Amount: 1, Balance: 1, ImportedAt: time.Now()},
 		{Date: time.Date(2026, 2, 1, 12, 0, 0, 0, time.UTC), Description: "February", Amount: 1, Balance: 1, ImportedAt: time.Now()},
 	}
-	if err := repository.CreateBatch(context.Background(), expenses); err != nil {
+	if err := repository.CreateBatch(context.Background(), expenseList); err != nil {
 		t.Fatalf("CreateBatch failed: %v", err)
 	}
 	start := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	end := time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC)
-	filtered, err := repository.GetByFilterOptions(context.Background(), ExpenseFilterOptions{StartDate: &start, EndDate: &end})
+	filtered, err := repository.GetByFilterOptions(context.Background(), FilterOptions{StartDate: &start, EndDate: &end})
 	if err != nil || len(filtered) != 1 || filtered[0].Description != "January" {
 		t.Fatalf("expected January only, got %+v err=%v", filtered, err)
 	}
@@ -191,15 +190,15 @@ func TestExpenseRepositoryDateFilterNormalizesStoredTimestamps(t *testing.T) {
 
 func TestExpenseRepositoryDeleteAll(t *testing.T) {
 	db := newExpenseTestDB(t)
-	repository := NewExpenseRepository(db)
-	expense := models.Expense{Date: time.Now(), Description: "To delete", Amount: 1, Balance: 1, ImportedAt: time.Now()}
+	repository := NewRepository(db)
+	expense := Expense{Date: time.Now(), Description: "To delete", Amount: 1, Balance: 1, ImportedAt: time.Now()}
 	if err := repository.Create(context.Background(), &expense); err != nil {
 		t.Fatalf("Create failed: %v", err)
 	}
 	if err := repository.DeleteAll(context.Background()); err != nil {
 		t.Fatalf("DeleteAll failed: %v", err)
 	}
-	count, err := repository.CountByFilterOptions(context.Background(), ExpenseFilterOptions{})
+	count, err := repository.CountByFilterOptions(context.Background(), FilterOptions{})
 	if err != nil || count != 0 {
 		t.Fatalf("expected empty database, got count=%d err=%v", count, err)
 	}
@@ -207,8 +206,8 @@ func TestExpenseRepositoryDeleteAll(t *testing.T) {
 
 func TestExpenseRepositoryUpdateCategory(t *testing.T) {
 	db := newExpenseTestDB(t)
-	repository := NewExpenseRepository(db)
-	expense := models.Expense{Date: time.Now(), Description: "Needs correction", Amount: 1, Balance: 1, ImportedAt: time.Now(), CategoryID: 1}
+	repository := NewRepository(db)
+	expense := Expense{Date: time.Now(), Description: "Needs correction", Amount: 1, Balance: 1, ImportedAt: time.Now(), CategoryID: 1}
 	if err := repository.Create(context.Background(), &expense); err != nil {
 		t.Fatalf("Create failed: %v", err)
 	}
@@ -233,11 +232,11 @@ func TestExpenseRepositoryBackfillRemovesExistingDuplicates(t *testing.T) {
 	if err != nil {
 		t.Fatalf("insert legacy duplicates: %v", err)
 	}
-	repository := NewExpenseRepository(db)
+	repository := NewRepository(db)
 	if err := repository.BackfillFingerprints(context.Background()); err != nil {
 		t.Fatalf("BackfillFingerprints failed: %v", err)
 	}
-	count, err := repository.CountByFilterOptions(context.Background(), ExpenseFilterOptions{})
+	count, err := repository.CountByFilterOptions(context.Background(), FilterOptions{})
 	if err != nil || count != 1 {
 		t.Fatalf("expected one deduplicated record, got count=%d err=%v", count, err)
 	}
@@ -245,17 +244,17 @@ func TestExpenseRepositoryBackfillRemovesExistingDuplicates(t *testing.T) {
 
 func TestExpenseRepositoryCreateAndGetAll(t *testing.T) {
 	db := newExpenseTestDB(t)
-	repository := NewExpenseRepository(db)
+	repository := NewRepository(db)
 	importedAt := time.Date(2026, time.January, 5, 12, 0, 0, 0, time.UTC)
-	expenses := []models.Expense{
+	expenseList := []Expense{
 		{Date: importedAt, Description: "Older", Amount: 10, Balance: 100, ImportedAt: importedAt},
 		{Date: importedAt.AddDate(0, 0, 1), Description: "Newer", Amount: -5, Balance: 95, ImportedAt: importedAt},
 	}
 
-	if err := repository.CreateBatch(context.Background(), expenses); err != nil {
+	if err := repository.CreateBatch(context.Background(), expenseList); err != nil {
 		t.Fatalf("CreateBatch failed: %v", err)
 	}
-	if expenses[0].ID == 0 || expenses[1].ID == 0 {
+	if expenseList[0].ID == 0 || expenseList[1].ID == 0 {
 		t.Fatal("expected CreateBatch to assign IDs")
 	}
 
@@ -276,13 +275,13 @@ func TestExpenseRepositoryCreateAndGetAll(t *testing.T) {
 
 func TestExpenseRepositoryCreateBatchRollsBackOnError(t *testing.T) {
 	db := newExpenseTestDB(t)
-	repository := NewExpenseRepository(db)
-	expenses := []models.Expense{
+	repository := NewRepository(db)
+	expenseList := []Expense{
 		{Date: time.Now(), Description: "Valid", Amount: 10, Balance: 100, ImportedAt: time.Now()},
 		{Date: time.Now(), Amount: 5, Balance: 105, ImportedAt: time.Now()},
 	}
 
-	if err := repository.CreateBatch(context.Background(), expenses); err == nil {
+	if err := repository.CreateBatch(context.Background(), expenseList); err == nil {
 		t.Fatal("expected CreateBatch to fail for missing description")
 	}
 

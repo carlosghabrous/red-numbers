@@ -1,4 +1,4 @@
-package repositories
+package database
 
 import (
 	"database/sql"
@@ -6,7 +6,7 @@ import (
 	"log/slog"
 )
 
-// IndexInfo represents information about a database index
+// IndexInfo represents information about a database index.
 type IndexInfo struct {
 	Seq     int
 	Cid     int
@@ -16,20 +16,20 @@ type IndexInfo struct {
 	Partial bool
 }
 
-// IndexColumnInfo represents detailed column information for an index
+// IndexColumnInfo represents detailed column information for an index.
 type IndexColumnInfo struct {
 	Seqno int
 	Cid   int
 	Name  string
 }
 
-// SchemaVerifier handles database schema verification
+// SchemaVerifier handles database schema verification.
 type SchemaVerifier struct {
 	db     *sql.DB
 	logger *slog.Logger
 }
 
-// NewSchemaVerifier creates a new schema verifier
+// NewSchemaVerifier creates a new schema verifier.
 func NewSchemaVerifier(db *sql.DB, logger *slog.Logger) *SchemaVerifier {
 	if logger == nil {
 		logger = slog.Default()
@@ -40,7 +40,7 @@ func NewSchemaVerifier(db *sql.DB, logger *slog.Logger) *SchemaVerifier {
 	}
 }
 
-// VerifyIndexes verifies all required indexes exist using PRAGMA index_list
+// VerifyIndexes verifies all required indexes exist using PRAGMA index_list.
 func (sv *SchemaVerifier) VerifyIndexes() (map[string]bool, error) {
 	sv.logger.Info("Starting index verification")
 
@@ -102,7 +102,7 @@ func (sv *SchemaVerifier) VerifyIndexes() (map[string]bool, error) {
 	return existingIndexes, nil
 }
 
-// VerifyIndexStructure verifies index structure using PRAGMA index_info
+// VerifyIndexStructure verifies index structure using PRAGMA index_info.
 func (sv *SchemaVerifier) VerifyIndexStructure() (map[string][]IndexColumnInfo, error) {
 	sv.logger.Info("Starting index structure verification")
 
@@ -140,7 +140,7 @@ func (sv *SchemaVerifier) VerifyIndexStructure() (map[string][]IndexColumnInfo, 
 	return indexStructures, nil
 }
 
-// getTableIndexes retrieves all indexes for a specific table
+// getTableIndexes retrieves all indexes for a specific table.
 func (sv *SchemaVerifier) getTableIndexes(tableName string) (map[string]bool, error) {
 	query := fmt.Sprintf("PRAGMA index_list(%s)", tableName)
 	rows, err := sv.db.Query(query)
@@ -173,7 +173,7 @@ func (sv *SchemaVerifier) getTableIndexes(tableName string) (map[string]bool, er
 	return indexes, nil
 }
 
-// getIndexColumns retrieves detailed column information for a specific index
+// getIndexColumns retrieves detailed column information for a specific index.
 func (sv *SchemaVerifier) getIndexColumns(indexName string) ([]IndexColumnInfo, error) {
 	query := fmt.Sprintf("PRAGMA index_info(%s)", indexName)
 	rows, err := sv.db.Query(query)
@@ -207,7 +207,7 @@ func (sv *SchemaVerifier) getIndexColumns(indexName string) ([]IndexColumnInfo, 
 	return columns, nil
 }
 
-// VerifyIndexesForPerformance checks if indexes improve query performance
+// VerifyIndexesForPerformance checks if indexes improve query performance.
 func (sv *SchemaVerifier) VerifyIndexesForPerformance() (map[string]string, error) {
 	sv.logger.Info("Starting performance verification with EXPLAIN QUERY PLAN")
 
@@ -260,13 +260,13 @@ func (sv *SchemaVerifier) VerifyIndexesForPerformance() (map[string]string, erro
 	return results, nil
 }
 
-// checkIfIndexUsed determines if a query plan uses an index
+// checkIfIndexUsed determines if a query plan uses an index.
 func checkIfIndexUsed(plan string) bool {
 	// Check for SEARCH keyword which indicates index usage
 	return true // PRAGMA EXPLAIN QUERY PLAN format varies; log the plan for inspection
 }
 
-// LogIndexSummary logs a comprehensive summary of all indexes
+// LogIndexSummary logs a comprehensive summary of all indexes.
 func (sv *SchemaVerifier) LogIndexSummary() error {
 	sv.logger.Info("=== DATABASE INDEX SUMMARY ===")
 
