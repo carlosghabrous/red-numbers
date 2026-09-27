@@ -394,13 +394,13 @@ This document organizes the expense tracking application implementation into 11 
   - Update expense in database
   - _Requirements: 3.0, 12.0_
 
-- [~] 7.4 Add confirmation and redirect after update
+- [x] 7.4 Add confirmation and redirect after update
   - Show "Category updated successfully" message
   - Redirect to expense list after save
   - Preserve active filters and sort in redirect
   - _Requirements: 3.0, 14.0_
 
-- [~] 7.5 Display expense in list as clickable link
+- [x] 7.5 Display expense in list as clickable link
   - Make expense row clickable to open detail page
   - Add visual indicator that row is clickable (cursor change)
   - _Requirements: 3.0, 14.0_
@@ -410,13 +410,13 @@ This document organizes the expense tracking application implementation into 11 
   - Preserve scroll position if possible
   - _Requirements: 3.0, 14.0_
 
-- [ ]* 7.7 Write unit tests for expense detail and update
+- [x] 7.7 Write unit tests for expense detail and update
   - Test loading expense by ID
   - Test updating expense category
   - Test invalid category rejection
   - _Requirements: 3.0_
 
-- [ ]* 7.8 Write integration test for correction workflow
+- [x] 7.8 Write integration test for correction workflow
   - Navigate to expense detail
   - Change category
   - Verify update in database

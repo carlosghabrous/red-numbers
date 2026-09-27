@@ -135,15 +135,23 @@ func (r *ExpenseRepository) GetByID(ctx context.Context, id int64) (*models.Expe
 		       confidence_level, imported_at, corrected_at
 		FROM expenses WHERE id = ?`
 	var expense models.Expense
+	var correctedAt sql.NullTime
+	var fingerprint sql.NullString
 	err := r.db.QueryRowContext(ctx, query, id).Scan(
 		&expense.ID, &expense.Date, &expense.Description, &expense.Amount, &expense.Balance,
-		&expense.CategoryID, &expense.Fingerprint, &expense.ConfidenceLevel, &expense.ImportedAt, &expense.CorrectedAt,
+		&expense.CategoryID, &fingerprint, &expense.ConfidenceLevel, &expense.ImportedAt, &correctedAt,
 	)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to get expense: %w", err)
+	}
+	if correctedAt.Valid {
+		expense.CorrectedAt = &correctedAt.Time
+	}
+	if fingerprint.Valid {
+		expense.Fingerprint = fingerprint.String
 	}
 	return &expense, nil
 }

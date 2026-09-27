@@ -205,6 +205,26 @@ func TestExpenseRepositoryDeleteAll(t *testing.T) {
 	}
 }
 
+func TestExpenseRepositoryUpdateCategory(t *testing.T) {
+	db := newExpenseTestDB(t)
+	repository := NewExpenseRepository(db)
+	expense := models.Expense{Date: time.Now(), Description: "Needs correction", Amount: 1, Balance: 1, ImportedAt: time.Now(), CategoryID: 1}
+	if err := repository.Create(context.Background(), &expense); err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
+	if err := repository.UpdateCategory(context.Background(), expense.ID, 2); err != nil {
+		t.Fatalf("UpdateCategory failed: %v", err)
+	}
+	updated, err := repository.GetByID(context.Background(), expense.ID)
+	if err != nil || updated == nil || updated.CategoryID != 2 || updated.ConfidenceLevel != "high" {
+		t.Fatalf("unexpected updated expense: %+v err=%v", updated, err)
+	}
+	var action string
+	if err := db.QueryRow(`SELECT action FROM audit_log WHERE expense_id = ?`, expense.ID).Scan(&action); err != nil || action != "category_correction" {
+		t.Fatalf("expected correction audit entry, action=%q err=%v", action, err)
+	}
+}
+
 func TestExpenseRepositoryBackfillRemovesExistingDuplicates(t *testing.T) {
 	db := newExpenseTestDB(t)
 	date := time.Date(2026, 1, 5, 12, 0, 0, 0, time.UTC)

@@ -598,7 +598,7 @@ func (h *UploadHandler) renderDashboard(w http.ResponseWriter, expenses []models
 		if listQuery != "" {
 			detailURL += "?return=" + url.QueryEscape("/?"+listQuery)
 		}
-		rows += fmt.Sprintf(`<tr><td><a href="%s">%s</a></td><td><a href="%s">%s</a></td><td>%.2f€</td><td>%.2f€</td><td>%s</td><td>%s</td></tr>`,
+		rows += fmt.Sprintf(`<tr class="expense-row"><td><a href="%s">%s</a></td><td><a href="%s">%s</a></td><td>%.2f€</td><td>%.2f€</td><td>%s</td><td>%s</td></tr>`,
 			html.EscapeString(detailURL), expense.Date.Format("02/01/2006"), html.EscapeString(detailURL), html.EscapeString(expense.Description), expense.Amount, expense.Balance,
 			html.EscapeString(categoryName), html.EscapeString(expense.ConfidenceLevel))
 	}
@@ -615,6 +615,10 @@ func (h *UploadHandler) renderDashboard(w http.ResponseWriter, expenses []models
 		table { width: 100%%; border-collapse: collapse; }
 		th, td { padding: 10px 12px; border-bottom: 1px solid #ddd; text-align: left; }
 		th { background: #f5f5f5; }
+		.expense-row { cursor: pointer; }
+		.expense-row:hover { background: #f5f9ff; }
+		.expense-row a { color: inherit; text-decoration: none; }
+		.expense-row a:hover { text-decoration: underline; }
 		.table-scroll { overflow-x: auto; }
 		.sort-controls { display: flex; gap: 10px; align-items: end; margin: 20px 0; flex-wrap: wrap; }
 		.sort-controls label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
@@ -625,6 +629,7 @@ func (h *UploadHandler) renderDashboard(w http.ResponseWriter, expenses []models
 		.actions .danger { background: #b42318; }
 		.actions .danger:hover { background: #8f1d14; }
 		.active-sort { background: #e8f0fe; }
+		.success-message { padding: 10px 12px; background: #e7f6ec; color: #176b36; border: 1px solid #a7d8b5; }
 		.filter-controls { border: 1px solid #ddd; padding: 14px; margin: 12px 0 20px; }
 		.category-options { display: flex; gap: 12px; flex-wrap: wrap; margin: 8px 0; }
 		.filter-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
@@ -637,6 +642,7 @@ func (h *UploadHandler) renderDashboard(w http.ResponseWriter, expenses []models
 <body>
 	<div class="container">
 		<h1>Expense Dashboard</h1>
+		%s
 		<p>%d expenses stored in the database.</p>
 		<div class="actions">
 			<a href="/upload">Upload another CSV</a>
@@ -673,10 +679,18 @@ func (h *UploadHandler) renderDashboard(w http.ResponseWriter, expenses []models
 		%s
 </div>
 </body>
-		</html>`, len(expenses), selectedOption(sortBy, "date"), selectedOption(sortBy, "amount"), selectedOption(sortBy, "category"), selectedOption(sortBy, "description"), selectedOption(sortDirection, "asc"), selectedOption(sortDirection, "desc"),
+		</html>`, dashboardMessage(listQuery), len(expenses), selectedOption(sortBy, "date"), selectedOption(sortBy, "amount"), selectedOption(sortBy, "category"), selectedOption(sortBy, "description"), selectedOption(sortDirection, "asc"), selectedOption(sortDirection, "desc"),
 		renderDashboardFilters(categories, filterState),
 		activeSortClass(sortBy, "date"), activeSortClass(sortBy, "description"), activeSortClass(sortBy, "amount"), activeSortClass(sortBy, "category"), rows,
 		renderPagination(listQuery, page, totalExpenses))
+}
+
+func dashboardMessage(listQuery string) string {
+	query, _ := url.ParseQuery(listQuery)
+	if query.Get("updated") != "1" {
+		return ""
+	}
+	return `<p class="success-message">Category updated successfully.</p>`
 }
 
 func selectedOption(current, option string) string {
@@ -792,7 +806,19 @@ func (h *UploadHandler) HandlePostExpenseDetail(w http.ResponseWriter, r *http.R
 	if returnURL == "" || !strings.HasPrefix(returnURL, "/") {
 		returnURL = "/"
 	}
+	returnURL = addQueryParameter(returnURL, "updated", "1")
 	http.Redirect(w, r, returnURL, http.StatusSeeOther)
+}
+
+func addQueryParameter(rawURL, key, value string) string {
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return "/"
+	}
+	query := parsed.Query()
+	query.Set(key, value)
+	parsed.RawQuery = query.Encode()
+	return parsed.String()
 }
 
 func (h *UploadHandler) renderExpenseDetail(w http.ResponseWriter, expense *models.Expense, categories []models.Category, returnURL, message string) {
