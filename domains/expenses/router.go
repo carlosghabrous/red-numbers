@@ -187,19 +187,47 @@ func (h *Handler) renderDashboard(w http.ResponseWriter, expenseList []Expense, 
 		.expense-row a { color: inherit; text-decoration: none; }
 		.expense-row a:hover { text-decoration: underline; }
 		.table-scroll { overflow-x: auto; }
-		.sort-controls { display: flex; gap: 10px; align-items: end; margin: 20px 0; flex-wrap: wrap; }
-		.sort-controls label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
-		.sort-controls select, .sort-controls button { padding: 7px 10px; }
+		.sort-header { display: inline-flex; align-items: center; gap: 6px; }
+		.sort-arrows { display: inline-flex; flex-direction: column; line-height: 0.7; }
+		.sort-arrow { color: #b6b6b6; text-decoration: none; font-size: 10px; }
+		.sort-arrow:hover { color: #555; }
+		.sort-arrow.active-arrow { color: #007bff; }
 		.actions { display: flex; gap: 10px; margin: 20px 0; flex-wrap: wrap; }
-		.actions a { margin-top: 0; padding: 8px 12px; background: #007bff; color: white; text-decoration: none; border-radius: 4px; }
-		.actions a:hover { background: #0056b3; }
-		.actions .danger { background: #b42318; }
-		.actions .danger:hover { background: #8f1d14; }
-		.active-sort { background: #e8f0fe; }
+		.btn { margin-top: 0; padding: 8px 12px; background: #007bff; color: #fff; text-decoration: none; border-radius: 4px; border: none; font: inherit; cursor: pointer; display: inline-block; }
+		.btn:hover { background: #0056b3; }
+		.btn-danger { background: #e2685f; }
+		.btn-danger:hover { background: #c9564d; }
+		.table-actions { display: flex; justify-content: flex-end; margin: 0 0 10px; }
 		.success-message { padding: 10px 12px; background: #e7f6ec; color: #176b36; border: 1px solid #a7d8b5; }
-		.filter-controls { border: 1px solid #ddd; padding: 14px; margin: 12px 0 20px; }
-		.category-options { display: flex; gap: 12px; flex-wrap: wrap; margin: 8px 0; }
-		.filter-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+		.filter-controls { border: 1px solid #e3e3e3; border-radius: 8px; padding: 20px 24px; margin: 16px 0 24px; background: #fafafa; }
+		.filter-row { display: flex; gap: 40px; flex-wrap: wrap; margin-bottom: 16px; }
+		.filter-group { display: flex; flex-direction: column; gap: 8px; }
+		.filter-label { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: #767676; }
+		.multiselect { position: relative; display: inline-block; }
+		.multiselect summary { list-style: none; cursor: pointer; padding: 8px 12px; border: 1px solid #d5d5d5; border-radius: 6px; background: #fff; font-size: 13px; }
+		.multiselect summary::-webkit-details-marker { display: none; }
+		.multiselect summary::after { content: " \25BE"; color: #888; }
+		.multiselect[open] summary::after { content: " \25B4"; }
+		.multiselect-panel { position: absolute; top: calc(100%% + 6px); left: 0; z-index: 10; background: #fff; border: 1px solid #d5d5d5; border-radius: 8px; padding: 6px; min-width: 240px; box-shadow: 0 8px 24px rgba(0,0,0,0.12); display: flex; flex-direction: column; gap: 1px; max-height: 260px; overflow-y: auto; }
+		.multiselect-option { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 6px; font-size: 13px; color: #333; cursor: pointer; }
+		.multiselect-option:hover { background: #f2f6ff; }
+		.multiselect-option input[type="checkbox"] { width: 15px; height: 15px; accent-color: #007bff; cursor: pointer; flex-shrink: 0; }
+		.segmented { display: inline-flex; border: 1px solid #d5d5d5; border-radius: 6px; overflow: hidden; background: #fff; width: fit-content; }
+		.segmented label { margin: 0; position: relative; }
+		.segmented input { position: absolute; opacity: 0; }
+		.segmented span { display: block; padding: 7px 12px; font-size: 13px; color: #444; border-right: 1px solid #d5d5d5; cursor: pointer; white-space: nowrap; }
+		.segmented label:last-child span { border-right: none; }
+		.segmented label:has(input:checked) span { background: #007bff; color: #fff; }
+		.segmented input:focus-visible ~ span { outline: 2px solid #007bff; outline-offset: -2px; }
+		.date-range-inputs { display: flex; align-items: center; gap: 8px; }
+		.date-range-inputs input[type="date"] { padding: 6px 8px; border: 1px solid #d5d5d5; border-radius: 6px; }
+		.date-sep { color: #999; font-size: 13px; }
+		.filter-footer { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding-top: 14px; border-top: 1px solid #e6e6e6; }
+		.active-filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; font-size: 13px; color: #767676; }
+		.filter-chip { background: #e8f0fe; color: #1a56c4; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 500; }
+		.filter-buttons { display: flex; gap: 10px; }
+		.btn-ghost { background: transparent; color: #444; border: 1px solid #ccc; }
+		.btn-ghost:hover { background: #eee; }
 		.pagination { display: flex; gap: 8px; align-items: center; margin-top: 20px; flex-wrap: wrap; }
 		.pagination a { margin-top: 0; padding: 6px 10px; border: 1px solid #ccc; text-decoration: none; }
 		.pagination .current { font-weight: bold; background: #e8f0fe; padding: 6px 10px; }
@@ -212,44 +240,59 @@ func (h *Handler) renderDashboard(w http.ResponseWriter, expenseList []Expense, 
 		%s
 		<p>%d expenses stored in the database.</p>
 		<div class="actions">
-			<a href="/upload">Upload another CSV</a>
-			<a href="/classification-log">Classification log</a>
+			<a class="btn" href="/upload">Upload another CSV</a>
+			<a class="btn" href="/classification-log">Classification log</a>
+		</div>
+		%s
+		<div class="table-actions">
 			<form method="post" action="/expenses/delete-all" onsubmit="return confirm('Delete all expenses and classification logs?');">
 				<input type="hidden" name="confirm" value="delete-all">
-				<button class="danger" type="submit">Delete all records</button>
+				<button class="btn btn-danger" type="submit">Delete all records</button>
 			</form>
 		</div>
-		<form class="sort-controls" method="get" action="/">
-			<label>Sort by
-				<select name="sort">
-					<option value="date"%s>Date</option>
-					<option value="amount"%s>Amount</option>
-					<option value="category"%s>Category</option>
-					<option value="description"%s>Description</option>
-				</select>
-			</label>
-			<label>Direction
-				<select name="direction">
-					<option value="asc"%s>Ascending</option>
-					<option value="desc"%s>Descending</option>
-				</select>
-			</label>
-			<button type="submit">Apply sort</button>
-		</form>
-		%s
 		<div class="table-scroll">
 			<table>
-				<thead><tr><th class="%s">Date</th><th class="%s">Description</th><th class="%s">Amount</th><th>Balance</th><th class="%s">Category</th><th>Confidence</th></tr></thead>
+				<thead><tr>%s%s%s<th>Balance</th>%s<th>Confidence</th></tr></thead>
 				<tbody>%s</tbody>
 			</table>
 		</div>
 		%s
 </div>
 </body>
-		</html>`, dashboardMessage(listQuery), len(expenseList), selectedOption(sortBy, "date"), selectedOption(sortBy, "amount"), selectedOption(sortBy, "category"), selectedOption(sortBy, "description"), selectedOption(sortDirection, "asc"), selectedOption(sortDirection, "desc"),
+		</html>`, dashboardMessage(listQuery), len(expenseList),
 		renderDashboardFilters(categoryList, filterState),
-		activeSortClass(sortBy, "date"), activeSortClass(sortBy, "description"), activeSortClass(sortBy, "amount"), activeSortClass(sortBy, "category"), rows,
+		renderSortableHeader("date", "Date", listQuery, sortBy, sortDirection),
+		renderSortableHeader("description", "Description", listQuery, sortBy, sortDirection),
+		renderSortableHeader("amount", "Amount", listQuery, sortBy, sortDirection),
+		renderSortableHeader("category", "Category", listQuery, sortBy, sortDirection),
+		rows,
 		renderPagination(listQuery, page, totalExpenses))
+}
+
+// renderSortableHeader renders a table header with clickable ascending/descending
+// arrows next to the title, replacing the old separate sort dropdown/button.
+func renderSortableHeader(column, label, listQuery, sortBy, sortDirection string) string {
+	ascQuery, _ := url.ParseQuery(listQuery)
+	ascQuery.Del("page")
+	ascQuery.Set("sort", column)
+	ascQuery.Set("direction", "asc")
+
+	descQuery, _ := url.ParseQuery(listQuery)
+	descQuery.Del("page")
+	descQuery.Set("sort", column)
+	descQuery.Set("direction", "desc")
+
+	ascClass, descClass := "", ""
+	if sortBy == column {
+		if sortDirection == "asc" {
+			ascClass = " active-arrow"
+		} else {
+			descClass = " active-arrow"
+		}
+	}
+
+	return fmt.Sprintf(`<th><span class="sort-header">%s<span class="sort-arrows"><a class="sort-arrow%s" href="/?%s" aria-label="Sort %s ascending">&#9650;</a><a class="sort-arrow%s" href="/?%s" aria-label="Sort %s descending">&#9660;</a></span></span></th>`,
+		html.EscapeString(label), ascClass, ascQuery.Encode(), html.EscapeString(label), descClass, descQuery.Encode(), html.EscapeString(label))
 }
 
 func dashboardMessage(listQuery string) string {
@@ -267,9 +310,9 @@ func selectedOption(current, option string) string {
 	return ""
 }
 
-func activeSortClass(current, option string) string {
-	if current == option {
-		return "active-sort"
+func checkedAttr(checked bool) string {
+	if checked {
+		return " checked"
 	}
 	return ""
 }
@@ -342,7 +385,15 @@ func renderDashboardFilters(categoryList []categories.Category, state dashboardF
 		if selected[int64(category.ID)] {
 			checked = " checked"
 		}
-		categoryOptions += fmt.Sprintf(`<label><input type="checkbox" name="category" value="%d"%s> %s</label>`, category.ID, checked, html.EscapeString(category.DisplayName))
+		categoryOptions += fmt.Sprintf(`<label class="multiselect-option"><input type="checkbox" name="category" value="%d"%s> %s</label>`, category.ID, checked, html.EscapeString(category.DisplayName))
+	}
+	categorySummary := "All categories"
+	switch len(state.options.CategoryIDs) {
+	case 0:
+	case 1:
+		categorySummary = "1 category selected"
+	default:
+		categorySummary = fmt.Sprintf("%d categories selected", len(state.options.CategoryIDs))
 	}
 	endInput := state.endInput
 	if endInput == "" && state.dateMode != "all" {
@@ -365,21 +416,53 @@ func renderDashboardFilters(categoryList []categories.Category, state dashboardF
 	return fmt.Sprintf(`<form class="filter-controls" method="get" action="/">
 		<input type="hidden" name="sort" value="%s">
 		<input type="hidden" name="direction" value="%s">
-		<strong>Categories</strong>
-		<div class="category-options">%s</div>
-		<div class="filter-actions">
-			<strong>Date range</strong>
-			<label><input type="radio" name="date_filter" value="all"%s> All Dates</label>
-			<label><input type="radio" name="date_filter" value="current"%s> Current Month</label>
-			<label><input type="radio" name="date_filter" value="previous"%s> Previous Month</label>
-			<label><input type="radio" name="date_filter" value="custom"%s> Custom</label>
-			<input type="date" name="start_date" value="%s">
-			<input type="date" name="end_date" value="%s">
-			<button type="submit">Apply filters</button>
-			<a href="/?clear_filters=1">Clear filters</a>
+		<div class="filter-row">
+			<div class="filter-group">
+				<span class="filter-label">Categories</span>
+				<details class="multiselect">
+					<summary>%s</summary>
+					<div class="multiselect-panel">%s</div>
+				</details>
+			</div>
+			<div class="filter-group">
+				<span class="filter-label">Date range</span>
+				<div class="segmented">
+					<label><input type="radio" name="date_filter" value="all"%s><span>All Dates</span></label>
+					<label><input type="radio" name="date_filter" value="current"%s><span>Current Month</span></label>
+					<label><input type="radio" name="date_filter" value="previous"%s><span>Previous Month</span></label>
+				</div>
+				<div class="date-range-inputs">
+					<input type="date" name="start_date" value="%s">
+					<span class="date-sep">to</span>
+					<input type="date" name="end_date" value="%s">
+				</div>
+			</div>
 		</div>
-		<div>Active filters: %d categories, %s</div>
-	</form>`, html.EscapeString(state.options.SortBy), html.EscapeString(state.options.SortDirection), categoryOptions,
-		selectedOption(state.dateMode, "all"), selectedOption(state.dateMode, "current"), selectedOption(state.dateMode, "previous"), selectedOption(state.dateMode, "custom"),
-		html.EscapeString(state.startDate), html.EscapeString(endInput), len(state.options.CategoryIDs), dateLabel)
+		<div class="filter-footer">
+			<div class="active-filters">%s</div>
+			<div class="filter-buttons">
+				<a class="btn btn-ghost" href="/?clear_filters=1">Clear filters</a>
+				<button class="btn" type="submit">Apply filters</button>
+			</div>
+		</div>
+	</form>`, html.EscapeString(state.options.SortBy), html.EscapeString(state.options.SortDirection), categorySummary, categoryOptions,
+		checkedAttr(state.dateMode == "all" || state.dateMode == "custom"), checkedAttr(state.dateMode == "current"), checkedAttr(state.dateMode == "previous"),
+		html.EscapeString(state.startDate), html.EscapeString(endInput),
+		renderActiveFilterChips(len(state.options.CategoryIDs), state.dateMode, dateLabel))
+}
+
+func renderActiveFilterChips(categoryCount int, dateMode, dateLabel string) string {
+	chips := ""
+	if categoryCount == 1 {
+		chips += `<span class="filter-chip">1 category</span>`
+	} else if categoryCount > 1 {
+		chips += fmt.Sprintf(`<span class="filter-chip">%d categories</span>`, categoryCount)
+	}
+	if dateMode != "all" {
+		chips += fmt.Sprintf(`<span class="filter-chip">%s</span>`, html.EscapeString(dateLabel))
+	}
+	if chips == "" {
+		return "No filters applied"
+	}
+	return chips
 }

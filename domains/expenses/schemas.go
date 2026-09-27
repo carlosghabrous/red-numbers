@@ -73,6 +73,9 @@ func dashboardFilterStateFromRequest(r *http.Request) (dashboardFilterState, err
 		state.dateMode = value
 		state.startDate = query.Get("start_date")
 		state.endInput = query.Get("end_date")
+		if state.dateMode == "all" && (state.startDate != "" || state.endInput != "") {
+			state.dateMode = "custom"
+		}
 	}
 	if state.dateMode == "" {
 		state.dateMode = "all"
@@ -93,7 +96,7 @@ func dashboardFilterStateFromRequest(r *http.Request) (dashboardFilterState, err
 		state.endInput = state.endDate
 	case "custom":
 		if state.startDate == "" || state.endInput == "" {
-			return state, fmt.Errorf("custom date filters require both start and end dates")
+			return state, fmt.Errorf("both a start date and an end date are required to filter by date range")
 		}
 		start, startErr := time.Parse("2006-01-02", state.startDate)
 		end, endErr := time.Parse("2006-01-02", state.endInput)
