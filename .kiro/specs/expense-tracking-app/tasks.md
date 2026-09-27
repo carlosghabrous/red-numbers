@@ -495,57 +495,57 @@ This document organizes the expense tracking application implementation into 11 
 
 ### Tasks
 
-- [~] 9.1 Create pie chart data preparation service
+- [x] 9.1 Create pie chart data preparation service
   - Create method to calculate category totals and percentages
   - Sort categories by amount descending
   - Handle edge cases (0% categories, rounding)
   - _Requirements: 8.0_
 
-- [~] 9.2 Implement SVG pie chart rendering
+- [x] 9.2 Implement SVG pie chart rendering
   - Create SVG pie chart generator using Go/server-side rendering
   - Calculate SVG path data for pie slices
   - Assign colors to categories consistently
   - _Requirements: 8.0, 14.0_
 
-- [~] 9.3 Add labels and legends to pie chart
+- [x] 9.3 Add labels and legends to pie chart
   - Display category names and percentages on chart
   - Create legend showing category colors
   - Position labels to avoid overlap
   - _Requirements: 8.0, 14.0_
 
-- [~] 9.4 Implement tooltip functionality
+- [x] 9.4 Implement tooltip functionality
   - Add hover tooltips showing category, amount, percentage
   - Use JavaScript for tooltip positioning
   - Update tooltip position on mouse move
   - _Requirements: 8.0, 14.0_
 
-- [~] 9.5 Integrate pie chart into dashboard
+- [x] 9.5 Integrate pie chart into dashboard
   - Add pie chart section to dashboard template
   - Call data preparation service on page load
   - Render pie chart SVG into page
   - Position chart responsively
   - _Requirements: 8.0, 14.0_
 
-- [~] 9.6 Make pie chart responsive for mobile
+- [x] 9.6 Make pie chart responsive for mobile
   - Reduce chart size on screens < 768px width
   - Stack labels vertically if needed
   - Ensure all elements readable on mobile
   - _Requirements: 8.0, 15.0_
 
-- [~] 9.7 Update pie chart when filters change
+- [x] 9.7 Update pie chart when filters change
   - Re-calculate chart data when category/date filter applied
   - Update chart display with new data
   - Handle case where no expenses match filter
   - _Requirements: 8.0, 6.0, 7.0_
 
-- [ ]* 9.8 Write unit tests for pie chart generation
+- [x] 9.8 Write unit tests for pie chart generation
   - Test data preparation with various category totals
   - Test SVG path generation for various slice sizes
   - Test color assignment consistency
   - Test percentage calculations
   - _Requirements: 8.0_
 
-- [ ]* 9.9 Write integration test for pie chart rendering
+- [x] 9.9 Write integration test for pie chart rendering
   - Load dashboard, verify pie chart displays
   - Apply filter, verify chart updates
   - Test responsiveness on different screen sizes

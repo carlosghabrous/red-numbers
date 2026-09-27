@@ -180,6 +180,46 @@ func TestExpenseRepositoryGetStatistics(t *testing.T) {
 	}
 }
 
+func TestExpenseRepositoryGetCategoryBreakdown(t *testing.T) {
+	db := newExpenseTestDB(t)
+	repository := NewRepository(db)
+	baseDate := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
+	expenseList := []Expense{
+		{Date: baseDate, Description: "Casa rent", Amount: -50, Balance: 1, CategoryID: 1, ImportedAt: baseDate},
+		{Date: baseDate.AddDate(0, 0, 1), Description: "Ocio cinema", Amount: -30, Balance: 1, CategoryID: 2, ImportedAt: baseDate},
+		{Date: baseDate.AddDate(0, 0, 2), Description: "Casa repairs", Amount: -20, Balance: 1, CategoryID: 1, ImportedAt: baseDate},
+		{Date: baseDate.AddDate(0, 0, 3), Description: "Salary transfer", Amount: 100, Balance: 1, CategoryID: 1, ImportedAt: baseDate},
+	}
+	if err := repository.CreateBatch(context.Background(), expenseList); err != nil {
+		t.Fatalf("CreateBatch failed: %v", err)
+	}
+
+	breakdown, err := repository.GetCategoryBreakdown(context.Background(), FilterOptions{})
+	if err != nil {
+		t.Fatalf("GetCategoryBreakdown failed: %v", err)
+	}
+	if len(breakdown) != 2 || breakdown[0].CategoryID != 1 || breakdown[0].Amount != 70 || breakdown[1].CategoryID != 2 || breakdown[1].Amount != 30 {
+		t.Fatalf("expected casa=70 then ocio=30 (highest first), got %+v", breakdown)
+	}
+
+	filtered, err := repository.GetCategoryBreakdown(context.Background(), FilterOptions{CategoryIDs: []int64{2}})
+	if err != nil {
+		t.Fatalf("GetCategoryBreakdown with filter failed: %v", err)
+	}
+	if len(filtered) != 1 || filtered[0].CategoryID != 2 || filtered[0].Amount != 30 {
+		t.Fatalf("expected only ocio=30, got %+v", filtered)
+	}
+
+	future := baseDate.AddDate(1, 0, 0)
+	empty, err := repository.GetCategoryBreakdown(context.Background(), FilterOptions{StartDate: &future})
+	if err != nil {
+		t.Fatalf("GetCategoryBreakdown with no matches failed: %v", err)
+	}
+	if len(empty) != 0 {
+		t.Fatalf("expected empty breakdown, got %+v", empty)
+	}
+}
+
 func TestExpenseRepositoryPagination(t *testing.T) {
 	db := newExpenseTestDB(t)
 	repository := NewRepository(db)

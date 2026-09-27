@@ -57,7 +57,7 @@ func (h *Handler) HandleGetDashboard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.renderDashboard(w, data.Expenses, data.CategoryNames, data.Categories, data.Statistics, sortBy, sortDirection, filterState, page, data.TotalExpenses, r.URL.RawQuery)
+	h.renderDashboard(w, data.Expenses, data.CategoryNames, data.Categories, data.Statistics, data.PieSlices, sortBy, sortDirection, filterState, page, data.TotalExpenses, r.URL.RawQuery)
 }
 
 // HandlePostDeleteAll removes every imported expense after explicit confirmation.
@@ -151,7 +151,7 @@ func (h *Handler) renderError(w http.ResponseWriter, errMsg string) {
 <body><h1>Something went wrong</h1><p>%s</p><a href="/">Back to dashboard</a></body></html>`, html.EscapeString(errMsg))
 }
 
-func (h *Handler) renderDashboard(w http.ResponseWriter, expenseList []Expense, categoryNames map[int64]string, categoryList []categories.Category, stats Statistics, sortBy, sortDirection string, filterState dashboardFilterState, page, totalExpenses int, listQuery string) {
+func (h *Handler) renderDashboard(w http.ResponseWriter, expenseList []Expense, categoryNames map[int64]string, categoryList []categories.Category, stats Statistics, pieSlices []PieSlice, sortBy, sortDirection string, filterState dashboardFilterState, page, totalExpenses int, listQuery string) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 
@@ -234,6 +234,19 @@ func (h *Handler) renderDashboard(w http.ResponseWriter, expenseList []Expense, 
 		.stat-value { font-size: 22px; font-weight: 700; color: #1a1a1a; }
 		.stat-sub { font-size: 13px; color: #767676; margin-top: 2px; }
 		.stats-empty { padding: 14px 16px; margin: 0 0 20px; border: 1px solid #e3e3e3; border-radius: 8px; background: #fafafa; color: #767676; font-size: 13px; }
+		.chart-card { border: 1px solid #e3e3e3; border-radius: 8px; padding: 20px 24px; margin: 0 0 20px; background: #fff; }
+		.chart-title { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: #767676; margin: 0 0 16px; }
+		.chart-body { display: flex; gap: 32px; align-items: center; flex-wrap: wrap; }
+		.pie-chart { width: 180px; height: 180px; flex-shrink: 0; }
+		.pie-slice { stroke: #fff; stroke-width: 1; }
+		.chart-legend { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; font-size: 13px; color: #333; min-width: 200px; flex: 1; }
+		.chart-legend li { display: flex; align-items: center; gap: 8px; }
+		.legend-swatch { width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0; }
+		.legend-amount { margin-left: auto; color: #767676; white-space: nowrap; padding-left: 12px; }
+		@media (max-width: 600px) {
+			.chart-body { flex-direction: column; align-items: stretch; }
+			.pie-chart { width: 100%%; max-width: 220px; height: auto; margin: 0 auto; }
+		}
 		.pagination { display: flex; gap: 8px; align-items: center; margin-top: 20px; flex-wrap: wrap; }
 		.pagination a { margin-top: 0; padding: 6px 10px; border: 1px solid #ccc; text-decoration: none; }
 		.pagination .current { font-weight: bold; background: #e8f0fe; padding: 6px 10px; }
@@ -249,6 +262,7 @@ func (h *Handler) renderDashboard(w http.ResponseWriter, expenseList []Expense, 
 			<a class="btn" href="/upload">Upload another CSV</a>
 			<a class="btn" href="/classification-log">Classification log</a>
 		</div>
+		%s
 		%s
 		%s
 		<div class="table-actions">
@@ -269,6 +283,7 @@ func (h *Handler) renderDashboard(w http.ResponseWriter, expenseList []Expense, 
 		</html>`, dashboardMessage(listQuery), len(expenseList),
 		renderDashboardFilters(categoryList, filterState),
 		renderSummaryStatistics(stats, categoryNames),
+		renderPieChart(pieSlices),
 		renderSortableHeader("date", "Date", listQuery, sortBy, sortDirection),
 		renderSortableHeader("description", "Description", listQuery, sortBy, sortDirection),
 		renderSortableHeader("amount", "Amount", listQuery, sortBy, sortDirection),
@@ -403,6 +418,29 @@ func renderSummaryStatistics(stats Statistics, categoryNames map[int64]string) s
 		<div class="stat-card"><span class="stat-label">Average Spend</span><span class="stat-value">%.2f€</span></div>
 		%s
 	</div>`, stats.TotalSpending, stats.TransactionCount, stats.AverageSpending, topCategoryCard)
+}
+
+// renderPieChart renders the category breakdown pie chart and its legend. Each
+// slice carries a native SVG <title> tooltip, so hover details work without JS.
+func renderPieChart(slices []PieSlice) string {
+	if len(slices) == 0 {
+		return `<div class="stats-empty">No spending data to chart.</div>`
+	}
+	paths := ""
+	legend := ""
+	for _, slice := range slices {
+		paths += fmt.Sprintf(`<path class="pie-slice" d="%s" fill="%s"><title>%s: %.2f€ (%.1f%%)</title></path>`,
+			slice.PathData, slice.Color, html.EscapeString(slice.CategoryName), slice.Amount, slice.Percentage)
+		legend += fmt.Sprintf(`<li><span class="legend-swatch" style="background:%s"></span>%s<span class="legend-amount">%.2f€ · %.1f%%</span></li>`,
+			slice.Color, html.EscapeString(slice.CategoryName), slice.Amount, slice.Percentage)
+	}
+	return fmt.Sprintf(`<div class="chart-card">
+		<h2 class="chart-title">Spending by Category</h2>
+		<div class="chart-body">
+			<svg class="pie-chart" viewBox="0 0 200 200" role="img" aria-label="Spending by category">%s</svg>
+			<ul class="chart-legend">%s</ul>
+		</div>
+	</div>`, paths, legend)
 }
 
 func renderDashboardFilters(categoryList []categories.Category, state dashboardFilterState) string {

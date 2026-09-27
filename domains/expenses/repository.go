@@ -360,6 +360,42 @@ func (r *Repository) GetStatistics(ctx context.Context, options FilterOptions) (
 	return stats, nil
 }
 
+// CategoryAmount is one category's total spending within a filtered set.
+type CategoryAmount struct {
+	CategoryID int64
+	Amount     float64
+}
+
+// GetCategoryBreakdown returns spending per category (highest first), for the pie
+// chart. Like Statistics, only outgoing (negative-amount) transactions count.
+func (r *Repository) GetCategoryBreakdown(ctx context.Context, options FilterOptions) ([]CategoryAmount, error) {
+	conditions, args := filterConditions(options)
+	conditions = append(conditions, "e.amount < 0")
+	query := `
+		SELECT COALESCE(e.category_id, 0), SUM(-e.amount) AS spent
+		FROM expenses e` + whereClauseFrom(conditions) + `
+		GROUP BY COALESCE(e.category_id, 0)
+		ORDER BY spent DESC`
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to calculate category breakdown: %w", err)
+	}
+	defer rows.Close()
+
+	breakdown := make([]CategoryAmount, 0)
+	for rows.Next() {
+		var item CategoryAmount
+		if err := rows.Scan(&item.CategoryID, &item.Amount); err != nil {
+			return nil, fmt.Errorf("failed to scan category breakdown: %w", err)
+		}
+		breakdown = append(breakdown, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate category breakdown: %w", err)
+	}
+	return breakdown, nil
+}
+
 func max(first, second int) int {
 	if first > second {
 		return first

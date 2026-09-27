@@ -128,3 +128,47 @@ func TestDashboardStatisticsWidgetReflectsFilters(t *testing.T) {
 		t.Fatalf("expected empty-state message, got body=%s", emptyResponse.Body.String())
 	}
 }
+
+func TestDashboardPieChartReflectsFilters(t *testing.T) {
+	db, err := sql.Open("sqlite3", ":memory:")
+	if err != nil {
+		t.Fatalf("open database: %v", err)
+	}
+	defer db.Close()
+	_, err = db.Exec(`
+		CREATE TABLE categories (id INTEGER PRIMARY KEY, name TEXT, display_name TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
+		CREATE TABLE expenses (id INTEGER PRIMARY KEY, date DATE, description TEXT, amount REAL, balance REAL, fingerprint TEXT, category_id INTEGER, confidence_level TEXT, imported_at TIMESTAMP, corrected_at TIMESTAMP);
+		CREATE TABLE audit_log (id INTEGER PRIMARY KEY, timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP, action TEXT, expense_id INTEGER, old_value TEXT, new_value TEXT, details TEXT);
+		INSERT INTO categories (id, name, display_name) VALUES (1, 'casa', 'Casa'), (2, 'ocio', 'Ocio');
+		INSERT INTO expenses (id, date, description, amount, balance, fingerprint, category_id, confidence_level, imported_at) VALUES
+			(1, '2026-01-05 00:00:00+00:00', 'Rent', -75, 100, 'fp1', 1, 'high', '2026-01-05 00:00:00+00:00'),
+			(2, '2026-01-06 00:00:00+00:00', 'Cinema', -25, 70, 'fp2', 2, 'high', '2026-01-06 00:00:00+00:00');`)
+	if err != nil {
+		t.Fatalf("create dashboard schema: %v", err)
+	}
+	deps := platform.Dependencies{Logger: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	service := NewService(NewRepository(db), categories.NewRepository(db))
+	handler := NewHandler(deps, service)
+
+	unfiltered := httptest.NewRequest(http.MethodGet, "/", nil)
+	unfilteredResponse := httptest.NewRecorder()
+	handler.HandleGetDashboard(unfilteredResponse, unfiltered)
+	body := unfilteredResponse.Body.String()
+	if !strings.Contains(body, "class=\"pie-slice\"") || !strings.Contains(body, "Casa: 75.00€ (75.0%)") || !strings.Contains(body, "Ocio: 25.00€ (25.0%)") {
+		t.Fatalf("expected two pie slices with tooltips, got body=%s", body)
+	}
+
+	filtered := httptest.NewRequest(http.MethodGet, "/?category=1", nil)
+	filteredResponse := httptest.NewRecorder()
+	handler.HandleGetDashboard(filteredResponse, filtered)
+	if !strings.Contains(filteredResponse.Body.String(), "Casa: 75.00€ (100.0%)") {
+		t.Fatalf("expected single filtered category at 100%%, got body=%s", filteredResponse.Body.String())
+	}
+
+	empty := httptest.NewRequest(http.MethodGet, "/?date_filter=custom&start_date=2030-01-01&end_date=2030-02-01", nil)
+	emptyResponse := httptest.NewRecorder()
+	handler.HandleGetDashboard(emptyResponse, empty)
+	if !strings.Contains(emptyResponse.Body.String(), "No spending data to chart.") {
+		t.Fatalf("expected empty chart message, got body=%s", emptyResponse.Body.String())
+	}
+}

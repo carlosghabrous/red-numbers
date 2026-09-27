@@ -25,6 +25,7 @@ type DashboardData struct {
 	CategoryNames map[int64]string
 	TotalExpenses int
 	Statistics    Statistics
+	PieSlices     []PieSlice
 }
 
 // GetDashboard loads the expenses and categories needed to render the dashboard.
@@ -41,6 +42,10 @@ func (s *Service) GetDashboard(ctx context.Context, options FilterOptions) (Dash
 	if err != nil {
 		return DashboardData{}, fmt.Errorf("failed to calculate expense statistics: %w", err)
 	}
+	breakdown, err := s.expenses.GetCategoryBreakdown(ctx, options)
+	if err != nil {
+		return DashboardData{}, fmt.Errorf("failed to calculate category breakdown: %w", err)
+	}
 	categoryList, err := s.categories.GetAllCategories(ctx)
 	if err != nil {
 		return DashboardData{}, fmt.Errorf("failed to load categories from the database: %w", err)
@@ -55,6 +60,7 @@ func (s *Service) GetDashboard(ctx context.Context, options FilterOptions) (Dash
 		CategoryNames: categoryNames,
 		TotalExpenses: total,
 		Statistics:    stats,
+		PieSlices:     buildPieSlices(breakdown, categoryNames),
 	}, nil
 }
 
