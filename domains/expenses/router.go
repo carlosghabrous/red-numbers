@@ -57,7 +57,7 @@ func (h *Handler) HandleGetDashboard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.renderDashboard(w, data.Expenses, data.CategoryNames, data.Categories, sortBy, sortDirection, filterState, page, data.TotalExpenses, r.URL.RawQuery)
+	h.renderDashboard(w, data.Expenses, data.CategoryNames, data.Categories, data.Statistics, sortBy, sortDirection, filterState, page, data.TotalExpenses, r.URL.RawQuery)
 }
 
 // HandlePostDeleteAll removes every imported expense after explicit confirmation.
@@ -151,7 +151,7 @@ func (h *Handler) renderError(w http.ResponseWriter, errMsg string) {
 <body><h1>Something went wrong</h1><p>%s</p><a href="/">Back to dashboard</a></body></html>`, html.EscapeString(errMsg))
 }
 
-func (h *Handler) renderDashboard(w http.ResponseWriter, expenseList []Expense, categoryNames map[int64]string, categoryList []categories.Category, sortBy, sortDirection string, filterState dashboardFilterState, page, totalExpenses int, listQuery string) {
+func (h *Handler) renderDashboard(w http.ResponseWriter, expenseList []Expense, categoryNames map[int64]string, categoryList []categories.Category, stats Statistics, sortBy, sortDirection string, filterState dashboardFilterState, page, totalExpenses int, listQuery string) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 
@@ -228,6 +228,12 @@ func (h *Handler) renderDashboard(w http.ResponseWriter, expenseList []Expense, 
 		.filter-buttons { display: flex; gap: 10px; }
 		.btn-ghost { background: transparent; color: #444; border: 1px solid #ccc; }
 		.btn-ghost:hover { background: #eee; }
+		.stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; margin: 0 0 20px; }
+		.stat-card { border: 1px solid #e3e3e3; border-radius: 8px; padding: 14px 16px; background: #fff; }
+		.stat-label { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: #767676; display: block; margin-bottom: 6px; }
+		.stat-value { font-size: 22px; font-weight: 700; color: #1a1a1a; }
+		.stat-sub { font-size: 13px; color: #767676; margin-top: 2px; }
+		.stats-empty { padding: 14px 16px; margin: 0 0 20px; border: 1px solid #e3e3e3; border-radius: 8px; background: #fafafa; color: #767676; font-size: 13px; }
 		.pagination { display: flex; gap: 8px; align-items: center; margin-top: 20px; flex-wrap: wrap; }
 		.pagination a { margin-top: 0; padding: 6px 10px; border: 1px solid #ccc; text-decoration: none; }
 		.pagination .current { font-weight: bold; background: #e8f0fe; padding: 6px 10px; }
@@ -243,6 +249,7 @@ func (h *Handler) renderDashboard(w http.ResponseWriter, expenseList []Expense, 
 			<a class="btn" href="/upload">Upload another CSV</a>
 			<a class="btn" href="/classification-log">Classification log</a>
 		</div>
+		%s
 		%s
 		<div class="table-actions">
 			<form method="post" action="/expenses/delete-all" onsubmit="return confirm('Delete all expenses and classification logs?');">
@@ -261,6 +268,7 @@ func (h *Handler) renderDashboard(w http.ResponseWriter, expenseList []Expense, 
 </body>
 		</html>`, dashboardMessage(listQuery), len(expenseList),
 		renderDashboardFilters(categoryList, filterState),
+		renderSummaryStatistics(stats, categoryNames),
 		renderSortableHeader("date", "Date", listQuery, sortBy, sortDirection),
 		renderSortableHeader("description", "Description", listQuery, sortBy, sortDirection),
 		renderSortableHeader("amount", "Amount", listQuery, sortBy, sortDirection),
@@ -372,6 +380,29 @@ func (h *Handler) renderExpenseDetail(w http.ResponseWriter, expense *Expense, c
 <div class="actions"><a href="%s">Back to List</a></div></div></body></html>`,
 		expense.Date.Format("02/01/2006"), html.EscapeString(expense.Description), expense.Amount, expense.Balance,
 		html.EscapeString(expense.ConfidenceLevel), html.EscapeString(returnURL), options, html.EscapeString(returnURL))
+}
+
+// renderSummaryStatistics renders the total/count/average/top-category widget shown
+// above the expense table. It reflects whatever filters are currently applied.
+func renderSummaryStatistics(stats Statistics, categoryNames map[int64]string) string {
+	if stats.TransactionCount == 0 {
+		return `<div class="stats-empty">No expenses match the current filters.</div>`
+	}
+	topCategoryCard := `<div class="stat-card"><span class="stat-label">Top Category</span><span class="stat-value">—</span></div>`
+	if stats.TopCategoryAmount > 0 {
+		topCategoryName := categoryNames[stats.TopCategoryID]
+		if topCategoryName == "" {
+			topCategoryName = "Sin clasificar"
+		}
+		topCategoryCard = fmt.Sprintf(`<div class="stat-card"><span class="stat-label">Top Category</span><span class="stat-value">%s</span><div class="stat-sub">%.2f€</div></div>`,
+			html.EscapeString(topCategoryName), stats.TopCategoryAmount)
+	}
+	return fmt.Sprintf(`<div class="stats-grid">
+		<div class="stat-card"><span class="stat-label">Total Spending</span><span class="stat-value">%.2f€</span></div>
+		<div class="stat-card"><span class="stat-label">Transactions</span><span class="stat-value">%d</span></div>
+		<div class="stat-card"><span class="stat-label">Average Spend</span><span class="stat-value">%.2f€</span></div>
+		%s
+	</div>`, stats.TotalSpending, stats.TransactionCount, stats.AverageSpending, topCategoryCard)
 }
 
 func renderDashboardFilters(categoryList []categories.Category, state dashboardFilterState) string {

@@ -128,6 +128,58 @@ func TestExpenseRepositoryGetByFilterOptions(t *testing.T) {
 	}
 }
 
+func TestExpenseRepositoryGetStatistics(t *testing.T) {
+	db := newExpenseTestDB(t)
+	repository := NewRepository(db)
+	baseDate := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
+	expenseList := []Expense{
+		{Date: baseDate, Description: "Casa rent", Amount: -50, Balance: 1, CategoryID: 1, ImportedAt: baseDate},
+		{Date: baseDate.AddDate(0, 0, 1), Description: "Ocio cinema", Amount: -30, Balance: 1, CategoryID: 2, ImportedAt: baseDate},
+		{Date: baseDate.AddDate(0, 0, 2), Description: "Casa repairs", Amount: -20, Balance: 1, CategoryID: 1, ImportedAt: baseDate},
+		{Date: baseDate.AddDate(0, 0, 3), Description: "Salary transfer", Amount: 100, Balance: 1, CategoryID: 1, ImportedAt: baseDate},
+	}
+	if err := repository.CreateBatch(context.Background(), expenseList); err != nil {
+		t.Fatalf("CreateBatch failed: %v", err)
+	}
+
+	stats, err := repository.GetStatistics(context.Background(), FilterOptions{})
+	if err != nil {
+		t.Fatalf("GetStatistics failed: %v", err)
+	}
+	if stats.TransactionCount != 4 {
+		t.Errorf("expected 4 transactions, got %d", stats.TransactionCount)
+	}
+	if stats.SpendingCount != 3 {
+		t.Errorf("expected 3 spending transactions, got %d", stats.SpendingCount)
+	}
+	if stats.TotalSpending != 100 {
+		t.Errorf("expected total spending 100, got %v", stats.TotalSpending)
+	}
+	if got := stats.AverageSpending; got < 33.32 || got > 33.34 {
+		t.Errorf("expected average spending ~33.33, got %v", got)
+	}
+	if stats.TopCategoryID != 1 || stats.TopCategoryAmount != 70 {
+		t.Errorf("expected top category 1 with 70, got id=%d amount=%v", stats.TopCategoryID, stats.TopCategoryAmount)
+	}
+
+	filteredStats, err := repository.GetStatistics(context.Background(), FilterOptions{CategoryIDs: []int64{1}})
+	if err != nil {
+		t.Fatalf("GetStatistics with category filter failed: %v", err)
+	}
+	if filteredStats.TransactionCount != 3 || filteredStats.SpendingCount != 2 || filteredStats.TotalSpending != 70 {
+		t.Errorf("unexpected filtered statistics: %+v", filteredStats)
+	}
+
+	future := baseDate.AddDate(1, 0, 0)
+	emptyStats, err := repository.GetStatistics(context.Background(), FilterOptions{StartDate: &future})
+	if err != nil {
+		t.Fatalf("GetStatistics with no matches failed: %v", err)
+	}
+	if emptyStats.TransactionCount != 0 || emptyStats.TotalSpending != 0 || emptyStats.AverageSpending != 0 {
+		t.Errorf("expected zeroed statistics for empty result, got %+v", emptyStats)
+	}
+}
+
 func TestExpenseRepositoryPagination(t *testing.T) {
 	db := newExpenseTestDB(t)
 	repository := NewRepository(db)

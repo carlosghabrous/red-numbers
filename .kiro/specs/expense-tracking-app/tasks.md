@@ -437,44 +437,44 @@ This document organizes the expense tracking application implementation into 11 
 
 ### Tasks
 
-- [~] 8.1 Implement SummaryStatistics calculation service
+- [x] 8.1 Implement SummaryStatistics calculation service
   - Create method to calculate: total, count, average, top_category
   - Accept expense list as input
   - Format currency as euros (€X,XXX.XX)
   - _Requirements: 11.0_
 
-- [~] 8.2 Add statistics retrieval to repository
+- [x] 8.2 Add statistics retrieval to repository
   - Create ExpenseRepository.GetStatistics(filters) method
   - Calculate totals grouped by category
   - Sort by amount descending to find top category
   - _Requirements: 11.0, 12.0_
 
-- [~] 8.3 Create summary statistics UI widget
+- [x] 8.3 Create summary statistics UI widget
   - Design widget layout showing 4 main stats
   - Create HTML template for stats display
   - Style with clear typography and spacing
   - _Requirements: 11.0, 14.0_
 
-- [~] 8.4 Integrate statistics into dashboard
+- [x] 8.4 Integrate statistics into dashboard
   - Call repository.GetStatistics() on page load
   - Pass current filters to statistics calculation
   - Render statistics widget above expense table
   - _Requirements: 11.0_
 
-- [~] 8.5 Update statistics when filters change
+- [x] 8.5 Update statistics when filters change
   - Re-calculate statistics when filters applied
   - Update widget without full page reload if possible
   - Show "no data" message if filtered results empty
   - _Requirements: 11.0, 6.0, 7.0_
 
-- [ ]* 8.6 Write unit tests for statistics calculation
+- [x] 8.6 Write unit tests for statistics calculation
   - Test total calculation with various amounts
   - Test average calculation
   - Test top category identification
   - Test currency formatting
   - _Requirements: 11.0_
 
-- [ ]* 8.7 Write integration test for statistics widget
+- [x] 8.7 Write integration test for statistics widget
   - Load dashboard with no filters, verify stats correct
   - Apply category filter, verify stats update
   - Apply date range filter, verify stats update

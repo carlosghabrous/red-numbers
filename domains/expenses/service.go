@@ -24,6 +24,7 @@ type DashboardData struct {
 	Categories    []categories.Category
 	CategoryNames map[int64]string
 	TotalExpenses int
+	Statistics    Statistics
 }
 
 // GetDashboard loads the expenses and categories needed to render the dashboard.
@@ -35,6 +36,10 @@ func (s *Service) GetDashboard(ctx context.Context, options FilterOptions) (Dash
 	total, err := s.expenses.CountByFilterOptions(ctx, options)
 	if err != nil {
 		return DashboardData{}, fmt.Errorf("failed to count expenses: %w", err)
+	}
+	stats, err := s.expenses.GetStatistics(ctx, options)
+	if err != nil {
+		return DashboardData{}, fmt.Errorf("failed to calculate expense statistics: %w", err)
 	}
 	categoryList, err := s.categories.GetAllCategories(ctx)
 	if err != nil {
@@ -49,6 +54,7 @@ func (s *Service) GetDashboard(ctx context.Context, options FilterOptions) (Dash
 		Categories:    categoryList,
 		CategoryNames: categoryNames,
 		TotalExpenses: total,
+		Statistics:    stats,
 	}, nil
 }
 

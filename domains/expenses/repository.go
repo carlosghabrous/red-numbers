@@ -202,6 +202,36 @@ type FilterOptions struct {
 	Offset        int
 }
 
+// filterConditions builds the shared WHERE conditions/args for category and date filters.
+func filterConditions(options FilterOptions) ([]string, []any) {
+	conditions := make([]string, 0, 3)
+	args := make([]any, 0, len(options.CategoryIDs)+2)
+	if len(options.CategoryIDs) > 0 {
+		placeholders := make([]string, len(options.CategoryIDs))
+		for index, categoryID := range options.CategoryIDs {
+			placeholders[index] = "?"
+			args = append(args, categoryID)
+		}
+		conditions = append(conditions, "e.category_id IN ("+strings.Join(placeholders, ",")+")")
+	}
+	if options.StartDate != nil {
+		conditions = append(conditions, "date(e.date) >= date(?)")
+		args = append(args, options.StartDate.Format("2006-01-02"))
+	}
+	if options.EndDate != nil {
+		conditions = append(conditions, "date(e.date) < date(?)")
+		args = append(args, options.EndDate.Format("2006-01-02"))
+	}
+	return conditions, args
+}
+
+func whereClauseFrom(conditions []string) string {
+	if len(conditions) == 0 {
+		return ""
+	}
+	return " WHERE " + strings.Join(conditions, " AND ")
+}
+
 // GetByFilterOptions returns expenses matching category/date filters and sorting.
 func (r *Repository) GetByFilterOptions(ctx context.Context, options FilterOptions) ([]Expense, error) {
 	sortBy := options.SortBy
@@ -224,28 +254,8 @@ func (r *Repository) GetByFilterOptions(ctx context.Context, options FilterOptio
 	if sortBy == "category" {
 		fromClause += " LEFT JOIN categories c ON c.id = e.category_id"
 	}
-	conditions := make([]string, 0, 2)
-	args := make([]any, 0, len(options.CategoryIDs)+2)
-	if len(options.CategoryIDs) > 0 {
-		placeholders := make([]string, len(options.CategoryIDs))
-		for index, categoryID := range options.CategoryIDs {
-			placeholders[index] = "?"
-			args = append(args, categoryID)
-		}
-		conditions = append(conditions, "e.category_id IN ("+strings.Join(placeholders, ",")+")")
-	}
-	if options.StartDate != nil {
-		conditions = append(conditions, "date(e.date) >= date(?)")
-		args = append(args, options.StartDate.Format("2006-01-02"))
-	}
-	if options.EndDate != nil {
-		conditions = append(conditions, "date(e.date) < date(?)")
-		args = append(args, options.EndDate.Format("2006-01-02"))
-	}
-	whereClause := ""
-	if len(conditions) > 0 {
-		whereClause = " WHERE " + strings.Join(conditions, " AND ")
-	}
+	conditions, args := filterConditions(options)
+	whereClause := whereClauseFrom(conditions)
 
 	limitClause := ""
 	argsForQuery := append([]any(nil), args...)
@@ -294,34 +304,60 @@ func (r *Repository) GetByFilterOptions(ctx context.Context, options FilterOptio
 
 // CountByFilterOptions returns the number of expenses matching the filters.
 func (r *Repository) CountByFilterOptions(ctx context.Context, options FilterOptions) (int, error) {
-	fromClause := "expenses e"
-	conditions := make([]string, 0, 2)
-	args := make([]any, 0, len(options.CategoryIDs)+2)
-	if len(options.CategoryIDs) > 0 {
-		placeholders := make([]string, len(options.CategoryIDs))
-		for index, categoryID := range options.CategoryIDs {
-			placeholders[index] = "?"
-			args = append(args, categoryID)
-		}
-		conditions = append(conditions, "e.category_id IN ("+strings.Join(placeholders, ",")+")")
-	}
-	if options.StartDate != nil {
-		conditions = append(conditions, "date(e.date) >= date(?)")
-		args = append(args, options.StartDate.Format("2006-01-02"))
-	}
-	if options.EndDate != nil {
-		conditions = append(conditions, "date(e.date) < date(?)")
-		args = append(args, options.EndDate.Format("2006-01-02"))
-	}
-	whereClause := ""
-	if len(conditions) > 0 {
-		whereClause = " WHERE " + strings.Join(conditions, " AND ")
-	}
+	conditions, args := filterConditions(options)
+	whereClause := whereClauseFrom(conditions)
 	var count int
-	if err := r.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+fromClause+whereClause, args...).Scan(&count); err != nil {
+	if err := r.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM expenses e"+whereClause, args...).Scan(&count); err != nil {
 		return 0, fmt.Errorf("failed to count expenses: %w", err)
 	}
 	return count, nil
+}
+
+// Statistics summarizes spending totals for a filtered set of expenses.
+// "Spending" only counts outgoing (negative-amount) transactions, so incoming
+// transfers/refunds don't inflate totals or dilute the average.
+type Statistics struct {
+	TransactionCount  int
+	SpendingCount     int
+	TotalSpending     float64
+	AverageSpending   float64
+	TopCategoryID     int64
+	TopCategoryAmount float64
+}
+
+// GetStatistics computes spending totals and the top category for the given filters.
+func (r *Repository) GetStatistics(ctx context.Context, options FilterOptions) (Statistics, error) {
+	conditions, args := filterConditions(options)
+	whereClause := whereClauseFrom(conditions)
+
+	var stats Statistics
+	overallQuery := `
+		SELECT
+			COUNT(*),
+			COUNT(CASE WHEN e.amount < 0 THEN 1 END),
+			COALESCE(SUM(CASE WHEN e.amount < 0 THEN -e.amount ELSE 0 END), 0)
+		FROM expenses e` + whereClause
+	if err := r.db.QueryRowContext(ctx, overallQuery, args...).Scan(
+		&stats.TransactionCount, &stats.SpendingCount, &stats.TotalSpending,
+	); err != nil {
+		return Statistics{}, fmt.Errorf("failed to calculate expense statistics: %w", err)
+	}
+	if stats.SpendingCount > 0 {
+		stats.AverageSpending = stats.TotalSpending / float64(stats.SpendingCount)
+	}
+
+	topConditions := append(append([]string{}, conditions...), "e.amount < 0")
+	topQuery := `
+		SELECT COALESCE(e.category_id, 0), SUM(-e.amount) AS spent
+		FROM expenses e` + whereClauseFrom(topConditions) + `
+		GROUP BY COALESCE(e.category_id, 0)
+		ORDER BY spent DESC
+		LIMIT 1`
+	err := r.db.QueryRowContext(ctx, topQuery, args...).Scan(&stats.TopCategoryID, &stats.TopCategoryAmount)
+	if err != nil && err != sql.ErrNoRows {
+		return Statistics{}, fmt.Errorf("failed to calculate top category: %w", err)
+	}
+	return stats, nil
 }
 
 func max(first, second int) int {
