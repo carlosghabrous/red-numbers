@@ -2,7 +2,10 @@ package main
 
 import (
 	"context"
+	"database/sql"
+	"embed"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"os"
@@ -16,6 +19,9 @@ import (
 	"github.com/ghab/red-numbers/domains/upload"
 	"github.com/ghab/red-numbers/platform"
 )
+
+//go:embed static
+var staticFiles embed.FS
 
 // Config holds application configuration from environment variables
 type Config struct {
@@ -67,6 +73,75 @@ func initLogging(logLevel slog.Level) {
 	slog.SetDefault(slog.New(handler))
 }
 
+// newRouter wires every domain's repositories, services, and handlers
+// together against db, and returns the fully middleware-wrapped handler that
+// main() and integration tests both serve requests through.
+func newRouter(db *sql.DB, logger *slog.Logger) (http.Handler, error) {
+	// Shared dependencies passed to every domain handler.
+	deps := platform.Dependencies{Logger: logger}
+
+	// Repositories: the abstraction each domain uses to read/write its data.
+	categoryRepo := categories.NewRepository(db)
+	expenseRepo := expenses.NewRepository(db)
+	classificationRepo := classification.NewRepository(db)
+
+	// Services: built once here and injected into handlers, rather than
+	// constructed inside the handlers themselves.
+	classifier := classification.NewClassifier()
+	classificationService := classification.NewService(classificationRepo)
+	expenseService := expenses.NewService(expenseRepo, categoryRepo)
+	categoryService := categories.NewService(categoryRepo)
+	uploadService := upload.NewService(logger, upload.NewCSVParser(), classifier, expenseRepo, categoryRepo, classificationRepo)
+
+	// One handler per domain.
+	uploadHandler := upload.NewHandler(deps, uploadService)
+	expenseHandler := expenses.NewHandler(deps, expenseService)
+	classificationHandler := classification.NewHandler(deps, classificationService)
+	categoryHandler := categories.NewHandler(deps, categoryService)
+
+	// Create HTTP router
+	mux := http.NewServeMux()
+
+	// Serve the shared stylesheet and any other static assets. Embedding
+	// them keeps the built binary self-contained for deployment.
+	staticAssets, err := fs.Sub(staticFiles, "static")
+	if err != nil {
+		return nil, fmt.Errorf("failed to load embedded static assets: %w", err)
+	}
+	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticAssets))))
+
+	// Register basic health check endpoint
+	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
+		logger.DebugContext(r.Context(), "Health check requested")
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprintf(w, `{"status":"ok","timestamp":"%s"}`, time.Now().Format(time.RFC3339))
+	})
+
+	// Register domain routes
+	mux.HandleFunc("GET /", expenseHandler.HandleGetDashboard)
+	mux.HandleFunc("POST /expenses/delete-all", expenseHandler.HandlePostDeleteAll)
+	mux.HandleFunc("GET /expenses/{id}", expenseHandler.HandleGetExpenseDetail)
+	mux.HandleFunc("POST /expenses/{id}", expenseHandler.HandlePostExpenseDetail)
+
+	mux.HandleFunc("GET /upload", uploadHandler.HandleGetUpload)
+	mux.HandleFunc("POST /upload", uploadHandler.HandlePostUpload)
+
+	mux.HandleFunc("GET /classification-log", classificationHandler.HandleGetClassificationLog)
+
+	mux.HandleFunc("POST /categories", categoryHandler.HandlePostCreate)
+
+	// Wrap every route with cross-cutting middleware: panic recovery outermost
+	// (so it catches failures in the other middleware too), then request
+	// logging, security headers, and CSRF validation before the mux itself.
+	return platform.Chain(mux,
+		platform.Recover(logger),
+		platform.RequestLogging(logger),
+		platform.SecurityHeaders(),
+		platform.CSRF(logger),
+	), nil
+}
+
 func main() {
 	// Load configuration
 	config := LoadConfig()
@@ -98,56 +173,16 @@ func main() {
 	}
 	defer database.Close(db, logger)
 
-	// Shared dependencies passed to every domain handler.
-	deps := platform.Dependencies{Logger: logger}
-
-	// Repositories: the abstraction each domain uses to read/write its data.
-	categoryRepo := categories.NewRepository(db)
-	expenseRepo := expenses.NewRepository(db)
-	classificationRepo := classification.NewRepository(db)
-
-	// Services: built once here and injected into handlers, rather than
-	// constructed inside the handlers themselves.
-	classifier := classification.NewClassifier()
-	classificationService := classification.NewService(classificationRepo)
-	expenseService := expenses.NewService(expenseRepo, categoryRepo)
-	categoryService := categories.NewService(categoryRepo)
-	uploadService := upload.NewService(logger, upload.NewCSVParser(), classifier, expenseRepo, categoryRepo, classificationRepo)
-
-	// One handler per domain.
-	uploadHandler := upload.NewHandler(deps, uploadService)
-	expenseHandler := expenses.NewHandler(deps, expenseService)
-	classificationHandler := classification.NewHandler(deps, classificationService)
-	categoryHandler := categories.NewHandler(deps, categoryService)
-
-	// Create HTTP router
-	mux := http.NewServeMux()
-
-	// Register basic health check endpoint
-	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
-		logger.DebugContext(r.Context(), "Health check requested")
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		fmt.Fprintf(w, `{"status":"ok","timestamp":"%s"}`, time.Now().Format(time.RFC3339))
-	})
-
-	// Register domain routes
-	mux.HandleFunc("GET /", expenseHandler.HandleGetDashboard)
-	mux.HandleFunc("POST /expenses/delete-all", expenseHandler.HandlePostDeleteAll)
-	mux.HandleFunc("GET /expenses/{id}", expenseHandler.HandleGetExpenseDetail)
-	mux.HandleFunc("POST /expenses/{id}", expenseHandler.HandlePostExpenseDetail)
-
-	mux.HandleFunc("GET /upload", uploadHandler.HandleGetUpload)
-	mux.HandleFunc("POST /upload", uploadHandler.HandlePostUpload)
-
-	mux.HandleFunc("GET /classification-log", classificationHandler.HandleGetClassificationLog)
-
-	mux.HandleFunc("POST /categories", categoryHandler.HandlePostCreate)
+	handler, err := newRouter(db, logger)
+	if err != nil {
+		logger.Error("Failed to build router", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
 
 	// Create HTTP server with reasonable timeouts
 	server := &http.Server{
 		Addr:           fmt.Sprintf(":%d", config.PORT),
-		Handler:        mux,
+		Handler:        handler,
 		ReadTimeout:    15 * time.Second,
 		WriteTimeout:   15 * time.Second,
 		IdleTimeout:    60 * time.Second,

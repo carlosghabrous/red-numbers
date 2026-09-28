@@ -41,6 +41,8 @@ func (h *Handler) HandlePostCreate(w http.ResponseWriter, r *http.Request) {
 			reason = "empty_name"
 		case errors.Is(err, ErrDuplicateCategory):
 			reason = "duplicate"
+		case errors.Is(err, ErrDisplayNameTooLong):
+			reason = "too_long"
 		default:
 			h.logger.ErrorContext(r.Context(), "Failed to create category", slog.String("error", err.Error()))
 		}

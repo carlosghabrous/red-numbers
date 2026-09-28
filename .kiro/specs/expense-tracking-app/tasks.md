@@ -567,87 +567,87 @@ This document organizes the expense tracking application implementation into 11 
 
 ### Tasks
 
-- [~] 10.1 Implement ReClassifyService for automatic updates
+- [x] 10.1 Implement ReClassifyService for automatic updates
   - Create service to re-classify all expenses after correction
   - Use description pattern matching to find similar expenses
   - Update category for all matching expenses
   - _Requirements: 4.0, 3.0_
 
-- [~] 10.2 Integrate re-classification into correction flow
+- [x] 10.2 Integrate re-classification into correction flow
   - After expense category update, trigger re-classification
   - Show "X similar expenses re-classified" message
   - Update all affected expenses in database
   - Maintain data integrity
   - _Requirements: 4.0, 3.0_
 
-- [~] 10.3 Add re-classification summary and logging
+- [x] 10.3 Add re-classification summary and logging
   - Create re-classification log entry with: count, categories affected, timestamp
   - Display re-classification summary to user
   - Store history for audit purposes
   - _Requirements: 4.0, 3.0_
 
-- [~] 10.4 Refresh dashboard after re-classification
+- [x] 10.4 Refresh dashboard after re-classification
   - Reload table data after re-classification completes
   - Update all statistics and charts
   - Show "Dashboard updated" confirmation
   - _Requirements: 4.0_
 
-- [~] 10.5 Create comprehensive CSS stylesheet
+- [x] 10.5 Create comprehensive CSS stylesheet
   - Design responsive layout for all screen sizes
   - Create mobile-first CSS with media queries
   - Style forms, tables, buttons, and charts
   - Ensure accessibility (contrast, font sizes)
   - _Requirements: 14.0, 15.0_
 
-- [~] 10.6 Add global error handling and middleware
+- [x] 10.6 Add global error handling and middleware
   - Create error handler for all routes
   - Add request logging middleware
   - Implement CSRF protection for forms
   - Add security headers (HSTS, XSS protection, etc.)
   - _Requirements: 14.0_
 
-- [~] 10.7 Add server-side validation and user feedback
+- [x] 10.7 Add server-side validation and user feedback
   - Validate all form inputs server-side
   - Display validation errors near form fields
   - Add success/error flash messages
   - _Requirements: 14.0_
 
-- [~] 10.8 Create comprehensive unit test suite
+- [x] 10.8 Create comprehensive unit test suite
   - Test all service classes (Classifier, Statistics, ReClassify)
   - Test all repository methods
   - Test error conditions and edge cases
   - Aim for 80%+ code coverage
   - _Requirements: 1.0-15.0_
 
-- [~] 10.9 Create comprehensive integration test suite
+- [x] 10.9 Create comprehensive integration test suite
   - Test full CSV import flow end-to-end
   - Test complete filtering and sorting workflows
   - Test correction and re-classification workflow
   - Test dashboard with all widgets
   - _Requirements: 1.0-15.0_
 
-- [~] 10.10 Write README with setup and usage instructions
+- [x] 10.10 Write README with setup and usage instructions
   - Document prerequisites (Go version, SQLite, dependencies)
   - Document build and run instructions
   - Provide example CSV file format
   - Document configuration options
   - _Requirements: 14.0_
 
-- [~] 10.11 Write deployment and production guide
+- [x] 10.11 Write deployment and production guide
   - Document database migration strategy
   - Provide deployment checklist
   - Document scaling considerations
   - Document backup and recovery procedures
   - _Requirements: 12.0, 14.0_
 
-- [~] 10.12 Final testing and polish
+- [x] 10.12 Final testing and polish
   - Test all features on desktop/tablet/mobile
   - Verify all error cases handled gracefully
   - Check accessibility with screen reader
   - Performance testing (load times, database queries)
   - _Requirements: 14.0, 15.0_
 
-- [ ]* 10.13 Write property-based tests for core logic
+- [x]* 10.13 Write property-based tests for core logic
   - Property test: For any expense, round-trip (classify → view → update) preserves data
   - Property test: For any filter combination, statistics are consistent with displayed data
   - Property test: Re-classification maintains data integrity

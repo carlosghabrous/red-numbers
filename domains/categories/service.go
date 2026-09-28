@@ -13,6 +13,15 @@ var ErrEmptyDisplayName = errors.New("display name is required")
 // ErrDuplicateCategory signals that a category with the same name already exists.
 var ErrDuplicateCategory = errors.New("category already exists")
 
+// ErrDisplayNameTooLong signals that the submitted display name exceeds the
+// limit enforced both here and by the form's maxlength attribute.
+var ErrDisplayNameTooLong = errors.New("display name must be 40 characters or fewer")
+
+// maxDisplayNameLength matches the "add a new category" form's maxlength
+// attribute; the server-side check is the real boundary, the HTML attribute
+// is only a hint for the browser.
+const maxDisplayNameLength = 40
+
 // Service coordinates category creation for the router.
 type Service struct {
 	categories *Repository
@@ -28,6 +37,9 @@ func (s *Service) CreateCategory(ctx context.Context, displayName string) (*Cate
 	displayName = strings.TrimSpace(displayName)
 	if displayName == "" {
 		return nil, ErrEmptyDisplayName
+	}
+	if len(displayName) > maxDisplayNameLength {
+		return nil, ErrDisplayNameTooLong
 	}
 	name := slugify(displayName)
 	if name == "" {

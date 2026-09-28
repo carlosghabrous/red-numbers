@@ -57,7 +57,7 @@ func (h *Handler) HandleGetDashboard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.renderDashboard(w, data.Expenses, data.CategoryNames, data.Categories, data.Statistics, data.PieSlices, sortBy, sortDirection, filterState, page, data.TotalExpenses, r.URL.RawQuery)
+	h.renderDashboard(w, data.Expenses, data.CategoryNames, data.Categories, data.Statistics, data.PieSlices, sortBy, sortDirection, filterState, page, data.TotalExpenses, r.URL.RawQuery, platform.CSRFToken(r))
 }
 
 // HandlePostDeleteAll removes every imported expense after explicit confirmation.
@@ -99,7 +99,7 @@ func (h *Handler) HandleGetExpenseDetail(w http.ResponseWriter, r *http.Request)
 	if returnURL != "/" {
 		selfURL += "?return=" + url.QueryEscape(returnURL)
 	}
-	h.renderExpenseDetail(w, expense, categoryList, returnURL, selfURL, r.URL.Query())
+	h.renderExpenseDetail(w, expense, categoryList, returnURL, selfURL, r.URL.Query(), platform.CSRFToken(r))
 }
 
 // HandlePostExpenseDetail saves a corrected category.
@@ -159,7 +159,7 @@ func (h *Handler) renderError(w http.ResponseWriter, errMsg string) {
 <body><h1>Something went wrong</h1><p>%s</p><a href="/">Back to dashboard</a></body></html>`, html.EscapeString(errMsg))
 }
 
-func (h *Handler) renderDashboard(w http.ResponseWriter, expenseList []Expense, categoryNames map[int64]string, categoryList []categories.Category, stats Statistics, pieSlices []PieSlice, sortBy, sortDirection string, filterState dashboardFilterState, page, totalExpenses int, listQuery string) {
+func (h *Handler) renderDashboard(w http.ResponseWriter, expenseList []Expense, categoryNames map[int64]string, categoryList []categories.Category, stats Statistics, pieSlices []PieSlice, sortBy, sortDirection string, filterState dashboardFilterState, page, totalExpenses int, listQuery, csrfToken string) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 
@@ -184,114 +184,43 @@ func (h *Handler) renderDashboard(w http.ResponseWriter, expenseList []Expense, 
 	<title>Expense Dashboard</title>
 	<meta charset="UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
-	<style>
-		body { font-family: sans-serif; background: #f5f5f5; padding: 20px; }
-		.container { max-width: 1000px; margin: 0 auto; background: #fff; padding: 32px; }
-		table { width: 100%%; border-collapse: collapse; }
-		th, td { padding: 10px 12px; border-bottom: 1px solid #ddd; text-align: left; }
-		th { background: #f5f5f5; }
-		.expense-row { cursor: pointer; }
-		.expense-row:hover { background: #f5f9ff; }
-		.expense-row a { color: inherit; text-decoration: none; }
-		.expense-row a:hover { text-decoration: underline; }
-		.table-scroll { overflow-x: auto; }
-		.sort-header { display: inline-flex; align-items: center; gap: 6px; }
-		.sort-arrows { display: inline-flex; flex-direction: column; line-height: 0.7; }
-		.sort-arrow { color: #b6b6b6; text-decoration: none; font-size: 10px; }
-		.sort-arrow:hover { color: #555; }
-		.sort-arrow.active-arrow { color: #007bff; }
-		.actions { display: flex; gap: 10px; margin: 20px 0; flex-wrap: wrap; }
-		.btn { margin-top: 0; padding: 8px 12px; background: #007bff; color: #fff; text-decoration: none; border-radius: 4px; border: none; font: inherit; cursor: pointer; display: inline-block; }
-		.btn:hover { background: #0056b3; }
-		.btn-danger { background: #e2685f; }
-		.btn-danger:hover { background: #c9564d; }
-		.table-actions { display: flex; justify-content: flex-end; margin: 0 0 10px; }
-		.success-message { padding: 10px 12px; background: #e7f6ec; color: #176b36; border: 1px solid #a7d8b5; }
-		.filter-controls { border: 1px solid #e3e3e3; border-radius: 8px; padding: 20px 24px; margin: 16px 0 24px; background: #fafafa; }
-		.filter-row { display: flex; gap: 40px; flex-wrap: wrap; margin-bottom: 16px; }
-		.filter-group { display: flex; flex-direction: column; gap: 8px; }
-		.filter-label { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: #767676; }
-		.multiselect { position: relative; display: inline-block; }
-		.multiselect summary { list-style: none; cursor: pointer; padding: 8px 12px; border: 1px solid #d5d5d5; border-radius: 6px; background: #fff; font-size: 13px; }
-		.multiselect summary::-webkit-details-marker { display: none; }
-		.multiselect summary::after { content: " \25BE"; color: #888; }
-		.multiselect[open] summary::after { content: " \25B4"; }
-		.multiselect-panel { position: absolute; top: calc(100%% + 6px); left: 0; z-index: 10; background: #fff; border: 1px solid #d5d5d5; border-radius: 8px; padding: 6px; min-width: 240px; box-shadow: 0 8px 24px rgba(0,0,0,0.12); display: flex; flex-direction: column; gap: 1px; max-height: 260px; overflow-y: auto; }
-		.multiselect-option { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 6px; font-size: 13px; color: #333; cursor: pointer; }
-		.multiselect-option:hover { background: #f2f6ff; }
-		.multiselect-option input[type="checkbox"] { width: 15px; height: 15px; accent-color: #007bff; cursor: pointer; flex-shrink: 0; }
-		.segmented { display: inline-flex; border: 1px solid #d5d5d5; border-radius: 6px; overflow: hidden; background: #fff; width: fit-content; }
-		.segmented label { margin: 0; position: relative; }
-		.segmented input { position: absolute; opacity: 0; }
-		.segmented span { display: block; padding: 7px 12px; font-size: 13px; color: #444; border-right: 1px solid #d5d5d5; cursor: pointer; white-space: nowrap; }
-		.segmented label:last-child span { border-right: none; }
-		.segmented label:has(input:checked) span { background: #007bff; color: #fff; }
-		.segmented input:focus-visible ~ span { outline: 2px solid #007bff; outline-offset: -2px; }
-		.date-range-inputs { display: flex; align-items: center; gap: 8px; }
-		.date-range-inputs input[type="date"] { padding: 6px 8px; border: 1px solid #d5d5d5; border-radius: 6px; }
-		.date-sep { color: #999; font-size: 13px; }
-		.filter-footer { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding-top: 14px; border-top: 1px solid #e6e6e6; }
-		.active-filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; font-size: 13px; color: #767676; }
-		.filter-chip { background: #e8f0fe; color: #1a56c4; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 500; }
-		.filter-buttons { display: flex; gap: 10px; }
-		.btn-ghost { background: transparent; color: #444; border: 1px solid #ccc; }
-		.btn-ghost:hover { background: #eee; }
-		.stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; margin: 0 0 20px; }
-		.stat-card { border: 1px solid #e3e3e3; border-radius: 8px; padding: 14px 16px; background: #fff; }
-		.stat-label { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: #767676; display: block; margin-bottom: 6px; }
-		.stat-value { font-size: 22px; font-weight: 700; color: #1a1a1a; }
-		.stat-sub { font-size: 13px; color: #767676; margin-top: 2px; }
-		.stats-empty { padding: 14px 16px; margin: 0 0 20px; border: 1px solid #e3e3e3; border-radius: 8px; background: #fafafa; color: #767676; font-size: 13px; }
-		.chart-card { border: 1px solid #e3e3e3; border-radius: 8px; padding: 20px 24px; margin: 0 0 20px; background: #fff; }
-		.chart-title { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: #767676; margin: 0 0 16px; }
-		.chart-body { display: flex; gap: 32px; align-items: center; flex-wrap: wrap; }
-		.pie-chart { width: 180px; height: 180px; flex-shrink: 0; }
-		.pie-slice { stroke: #fff; stroke-width: 1; }
-		.chart-legend { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; font-size: 13px; color: #333; min-width: 200px; flex: 1; }
-		.chart-legend li { display: flex; align-items: center; gap: 8px; }
-		.legend-swatch { width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0; }
-		.legend-amount { margin-left: auto; color: #767676; white-space: nowrap; padding-left: 12px; }
-		@media (max-width: 600px) {
-			.chart-body { flex-direction: column; align-items: stretch; }
-			.pie-chart { width: 100%%; max-width: 220px; height: auto; margin: 0 auto; }
-		}
-		.pagination { display: flex; gap: 8px; align-items: center; margin-top: 20px; flex-wrap: wrap; }
-		.pagination a { margin-top: 0; padding: 6px 10px; border: 1px solid #ccc; text-decoration: none; }
-		.pagination .current { font-weight: bold; background: #e8f0fe; padding: 6px 10px; }
-		a { display: inline-block; margin-top: 20px; }
-	</style>
+	<link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-	<div class="container">
-		<h1>Expense Dashboard</h1>
-		%s
-		<p>%d expenses stored in the database.</p>
-		<div class="actions">
-			<a class="btn" href="/upload">Upload another CSV</a>
-			<a class="btn" href="/classification-log">Classification log</a>
+	<div class="page">
+		<div class="card">
+			<h1>Expense Dashboard</h1>
+			%s
+			<p>%d expenses stored in the database.</p>
+			<div class="actions">
+				<a class="btn" href="/upload">Upload another CSV</a>
+				<a class="btn btn-secondary" href="/classification-log">Classification log</a>
+			</div>
+			%s
+			%s
+			%s
+			<div class="table-actions">
+				<form method="post" action="/expenses/delete-all" onsubmit="return confirm('Delete all expenses and classification logs?');">
+					<input type="hidden" name="csrf_token" value="%s">
+					<input type="hidden" name="confirm" value="delete-all">
+					<button class="btn btn-danger" type="submit">Delete all records</button>
+				</form>
+			</div>
+			<div class="table-scroll">
+				<table>
+					<thead><tr>%s%s%s<th>Balance</th>%s<th>Confidence</th></tr></thead>
+					<tbody>%s</tbody>
+				</table>
+			</div>
+			%s
 		</div>
-		%s
-		%s
-		%s
-		<div class="table-actions">
-			<form method="post" action="/expenses/delete-all" onsubmit="return confirm('Delete all expenses and classification logs?');">
-				<input type="hidden" name="confirm" value="delete-all">
-				<button class="btn btn-danger" type="submit">Delete all records</button>
-			</form>
-		</div>
-		<div class="table-scroll">
-			<table>
-				<thead><tr>%s%s%s<th>Balance</th>%s<th>Confidence</th></tr></thead>
-				<tbody>%s</tbody>
-			</table>
-		</div>
-		%s
-</div>
+	</div>
 </body>
-		</html>`, dashboardMessage(listQuery), len(expenseList),
+</html>`, dashboardMessage(listQuery), len(expenseList),
 		renderDashboardFilters(categoryList, filterState),
 		renderSummaryStatistics(stats, categoryNames),
 		renderPieChart(pieSlices),
+		html.EscapeString(csrfToken),
 		renderSortableHeader("date", "Date", listQuery, sortBy, sortDirection),
 		renderSortableHeader("description", "Description", listQuery, sortBy, sortDirection),
 		renderSortableHeader("amount", "Amount", listQuery, sortBy, sortDirection),
@@ -338,13 +267,6 @@ func dashboardMessage(listQuery string) string {
 	return fmt.Sprintf(`<p class="success-message">%s</p>`, message)
 }
 
-func selectedOption(current, option string) string {
-	if current == option {
-		return " selected"
-	}
-	return ""
-}
-
 func checkedAttr(checked bool) string {
 	if checked {
 		return " checked"
@@ -388,7 +310,7 @@ func renderPagination(listQuery string, page, totalExpenses int) string {
 	return markup + "</nav>"
 }
 
-func (h *Handler) renderExpenseDetail(w http.ResponseWriter, expense *Expense, categoryList []categories.Category, returnURL, selfURL string, query url.Values) {
+func (h *Handler) renderExpenseDetail(w http.ResponseWriter, expense *Expense, categoryList []categories.Category, returnURL, selfURL string, query url.Values, csrfToken string) {
 	options := ""
 	for _, category := range categoryList {
 		selected := ""
@@ -397,20 +319,22 @@ func (h *Handler) renderExpenseDetail(w http.ResponseWriter, expense *Expense, c
 		}
 		options += fmt.Sprintf(`<option value="%d"%s>%s</option>`, category.ID, selected, html.EscapeString(category.DisplayName))
 	}
+	token := html.EscapeString(csrfToken)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	fmt.Fprintf(w, `<!DOCTYPE html>
 <html><head><title>Expense Detail</title><meta charset="UTF-8">
-<style>body{font-family:sans-serif;background:#f5f5f5;padding:20px}.container{max-width:620px;margin:auto;background:#fff;padding:32px}dt{font-weight:bold;margin-top:12px}dd{margin:4px 0}select,button,input[type=text]{padding:8px;margin-top:8px}.actions{display:flex;gap:12px;margin-top:24px}.actions a{padding:8px 12px}.add-category{margin-top:20px;padding-top:16px;border-top:1px solid #ddd}.add-category label{font-size:13px;color:#555}.success-message{padding:10px 12px;background:#e7f6ec;color:#176b36;border:1px solid #a7d8b5}.error-message{padding:10px 12px;background:#fdecea;color:#a33a31;border:1px solid #f3b7b0}</style>
-</head><body><div class="container"><h1>Expense Detail</h1>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="/static/style.css">
+</head><body><div class="page"><div class="card card--narrow"><h1>Expense Detail</h1>
 %s
 <dl><dt>Date</dt><dd>%s</dd><dt>Description</dt><dd>%s</dd><dt>Amount</dt><dd>%.2f€</dd><dt>Balance</dt><dd>%.2f€</dd><dt>Confidence</dt><dd>%s</dd></dl>
-<form method="post"><input type="hidden" name="return" value="%s"><label for="category_id">Category</label><br><select id="category_id" name="category_id">%s</select><br><button type="submit">Save Changes</button></form>
-<form method="post" action="/categories" class="add-category"><input type="hidden" name="return" value="%s"><label for="display_name">Add a new category</label><br><input type="text" id="display_name" name="display_name" placeholder="e.g. Mascotas" required><button type="submit">Add category</button></form>
-<div class="actions"><a href="%s">Back to List</a></div></div></body></html>`,
+<form method="post"><input type="hidden" name="csrf_token" value="%s"><input type="hidden" name="return" value="%s"><label for="category_id">Category</label><select id="category_id" name="category_id">%s</select><button class="btn" type="submit">Save Changes</button></form>
+<form method="post" action="/categories" class="add-category"><input type="hidden" name="csrf_token" value="%s"><input type="hidden" name="return" value="%s"><label for="display_name">Add a new category</label><input type="text" id="display_name" name="display_name" placeholder="e.g. Mascotas" maxlength="40" required><button class="btn btn-secondary" type="submit">Add category</button></form>
+<div class="actions"><a href="%s">Back to List</a></div></div></div></body></html>`,
 		categoryFormMessage(query),
 		expense.Date.Format("02/01/2006"), html.EscapeString(expense.Description), expense.Amount, expense.Balance,
-		html.EscapeString(expense.ConfidenceLevel), html.EscapeString(returnURL), options,
-		html.EscapeString(selfURL), html.EscapeString(returnURL))
+		html.EscapeString(expense.ConfidenceLevel), token, html.EscapeString(returnURL), options,
+		token, html.EscapeString(selfURL), html.EscapeString(returnURL))
 }
 
 // categoryFormMessage renders a success/error banner after an "Add a new
@@ -424,6 +348,8 @@ func categoryFormMessage(query url.Values) string {
 		return `<p class="error-message">Category name cannot be empty.</p>`
 	case "duplicate":
 		return `<p class="error-message">A category with that name already exists.</p>`
+	case "too_long":
+		return `<p class="error-message">Category name must be 40 characters or fewer.</p>`
 	case "failed":
 		return `<p class="error-message">Failed to add category.</p>`
 	default:

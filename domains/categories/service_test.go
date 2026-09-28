@@ -3,6 +3,7 @@ package categories
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -44,6 +45,22 @@ func TestServiceCreateCategoryRejectsDuplicates(t *testing.T) {
 
 	if _, err := service.CreateCategory(ctx, "Casa"); !errors.Is(err, ErrDuplicateCategory) {
 		t.Fatalf("expected ErrDuplicateCategory for name colliding with seeded 'casa', got %v", err)
+	}
+}
+
+func TestServiceCreateCategoryRejectsTooLongName(t *testing.T) {
+	db := setupCategoriesTestDB(t)
+	defer db.Close()
+	service := NewService(NewRepository(db))
+
+	tooLong := strings.Repeat("a", maxDisplayNameLength+1)
+	if _, err := service.CreateCategory(context.Background(), tooLong); !errors.Is(err, ErrDisplayNameTooLong) {
+		t.Fatalf("expected ErrDisplayNameTooLong, got %v", err)
+	}
+
+	exactly := strings.Repeat("a", maxDisplayNameLength)
+	if _, err := service.CreateCategory(context.Background(), exactly); err != nil {
+		t.Fatalf("expected a name at exactly the limit to be accepted, got %v", err)
 	}
 }
 

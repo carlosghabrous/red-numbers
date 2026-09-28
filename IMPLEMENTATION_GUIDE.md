@@ -95,22 +95,26 @@ go run main.go
 - ✅ Slice 4: Sorting
 - ✅ Slice 5: Category Filtering
 - ✅ Slice 6: Date Range Filtering
+- ✅ Slice 7: Expense Correction UI
+- ✅ Slice 8: Summary Statistics Widget
+- ✅ Slice 9: Pie Chart Visualization
+- ✅ Slice 10: Re-Classification & Polish
 
 **Next to implement:**
-- 🔲 Slice 7: Expense Correction UI
+- 🔲 Slice 11: Weekly and Monthly Histograms
 
 ## What to Implement Next
 
-Continue with **Slice 7: Expense Correction UI**
+Continue with **Slice 11: Weekly and Monthly Histograms**
 
-Slices 1 through 6 established upload, persistence, classification, sorting, and filtering. The next slice adds:
-1. **Expense detail page** - View a single stored expense
-2. **Category correction** - Change and save its assigned category
-3. **Updated dashboard** - Show the corrected category in the list
+Slices 1 through 10 established upload, persistence, classification, sorting,
+filtering, correction with automatic re-classification, statistics, a pie
+chart, and production polish (styling, CSRF/security headers, tests, docs).
+The next slice adds weekly and monthly bar charts showing spending trends by
+category.
 
-**Success:** Open an expense → Correct its category → See the change on the dashboard
-
-This adds category assignment on top of the persisted expense data.
+**Success:** Dashboard shows weekly and monthly histograms that update with
+the active filters, alongside the existing pie chart.
 
 ## Development Flow
 

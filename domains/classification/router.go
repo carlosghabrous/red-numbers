@@ -39,9 +39,13 @@ func (h *Handler) HandleGetClassificationLog(w http.ResponseWriter, r *http.Requ
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	fmt.Fprintf(w, `<!DOCTYPE html>
-<html><head><title>Classification Log</title><meta charset="UTF-8"></head>
-<body><h1>Classification Log</h1>
-<table><thead><tr><th>Timestamp</th><th>Expense</th><th>Category</th><th>Details</th></tr></thead>
-<tbody>%s</tbody></table><p><a href="/">Back to dashboard</a></p>
-</body></html>`, rows)
+<html><head><title>Classification Log</title><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="/static/style.css"></head>
+<body><div class="page"><div class="card">
+<h1>Classification Log</h1>
+<div class="table-scroll"><table><thead><tr><th>Timestamp</th><th>Expense</th><th>Category</th><th>Details</th></tr></thead>
+<tbody>%s</tbody></table></div>
+<p><a href="/">← Back to dashboard</a></p>
+</div></div></body></html>`, rows)
 }

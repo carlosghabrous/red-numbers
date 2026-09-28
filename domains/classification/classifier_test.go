@@ -2,6 +2,12 @@ package classification
 
 import "testing"
 
+func TestNormalizeDescriptionMatchesInternalNormalization(t *testing.T) {
+	if got := NormalizeDescription("  Mercadóna   Madrid  "); got != "mercadona madrid" {
+		t.Fatalf("NormalizeDescription() = %q, want %q", got, "mercadona madrid")
+	}
+}
+
 func TestFuzzyClassifierMatchesCategories(t *testing.T) {
 	classifier := NewClassifier()
 	tests := []struct {

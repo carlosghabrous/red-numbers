@@ -34,164 +34,17 @@ func (h *Handler) HandleGetUpload(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 
-	html := `<!DOCTYPE html>
+	page := fmt.Sprintf(`<!DOCTYPE html>
 <html>
 <head>
 	<title>Upload CSV - Expense Tracking</title>
 	<meta charset="UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
-	<style>
-		* {
-			margin: 0;
-			padding: 0;
-			box-sizing: border-box;
-		}
-		body {
-			font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-			background: #f5f5f5;
-			padding: 20px;
-		}
-		.container {
-			max-width: 600px;
-			margin: 0 auto;
-			background: white;
-			border-radius: 8px;
-			box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-			padding: 40px;
-		}
-		h1 {
-			color: #333;
-			margin-bottom: 10px;
-			font-size: 28px;
-		}
-		.subtitle {
-			color: #666;
-			margin-bottom: 30px;
-			font-size: 14px;
-		}
-		.form-group {
-			margin-bottom: 25px;
-		}
-		label {
-			display: block;
-			margin-bottom: 8px;
-			color: #333;
-			font-weight: 500;
-			font-size: 14px;
-		}
-		input[type="file"] {
-			display: block;
-			padding: 10px;
-			border: 2px solid #e0e0e0;
-			border-radius: 4px;
-			cursor: pointer;
-			font-size: 14px;
-			width: 100%;
-		}
-		input[type="file"]:hover {
-			border-color: #999;
-		}
-		.file-info {
-			font-size: 12px;
-			color: #666;
-			margin-top: 8px;
-		}
-		.instructions {
-			background: #f9f9f9;
-			border-left: 4px solid #007bff;
-			padding: 15px;
-			margin-bottom: 25px;
-			border-radius: 4px;
-			font-size: 13px;
-			color: #555;
-			line-height: 1.6;
-		}
-		.instructions h3 {
-			color: #333;
-			margin-bottom: 10px;
-			font-size: 14px;
-		}
-		.instructions ul {
-			margin-left: 20px;
-		}
-		.instructions li {
-			margin-bottom: 5px;
-		}
-		.instructions code {
-			background: #eee;
-			padding: 2px 4px;
-			border-radius: 2px;
-			font-family: monospace;
-			font-size: 12px;
-		}
-		button {
-			background: #007bff;
-			color: white;
-			padding: 12px 30px;
-			border: none;
-			border-radius: 4px;
-			font-size: 16px;
-			font-weight: 500;
-			cursor: pointer;
-			width: 100%;
-			transition: background 0.2s;
-		}
-		button:hover {
-			background: #0056b3;
-		}
-		button:active {
-			background: #004085;
-		}
-		.dashboard-link {
-			display: block;
-			margin-top: 15px;
-			text-align: center;
-			color: #007bff;
-			text-decoration: none;
-			font-size: 14px;
-		}
-		.dashboard-link:hover {
-			text-decoration: underline;
-		}
-		.error {
-			background: #f8d7da;
-			border: 1px solid #f5c6cb;
-			color: #721c24;
-			padding: 12px;
-			border-radius: 4px;
-			margin-bottom: 20px;
-			font-size: 14px;
-		}
-		.success {
-			background: #d4edda;
-			border: 1px solid #c3e6cb;
-			color: #155724;
-			padding: 12px;
-			border-radius: 4px;
-			margin-bottom: 20px;
-			font-size: 14px;
-		}
-		.example-table {
-			width: 100%;
-			border-collapse: collapse;
-			font-size: 12px;
-			margin-top: 10px;
-			background: #fff;
-		}
-		.example-table th,
-		.example-table td {
-			border: 1px solid #ddd;
-			padding: 8px;
-			text-align: left;
-		}
-		.example-table th {
-			background: #f5f5f5;
-			font-weight: 600;
-		}
-	</style>
+	<link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-	<div class="container">
+	<div class="page">
+	<div class="card card--narrow">
 		<h1>Upload Bank Export CSV</h1>
 		<p class="subtitle">Import your transaction history</p>
 
@@ -204,7 +57,8 @@ func (h *Handler) HandleGetUpload(w http.ResponseWriter, r *http.Request) {
 				<li>Date format: DD/MM/YYYY or DD-MM-YYYY</li>
 				<li>Amount format: supports comma (1.234,56) or period (1234.56) as decimal separator</li>
 			</ul>
-			<h3 style="margin-top: 15px;">Example CSV Format</h3>
+			<h3>Example CSV Format</h3>
+			<div class="table-scroll">
 			<table class="example-table">
 				<tr>
 					<th>fecha de operación</th>
@@ -228,22 +82,25 @@ func (h *Handler) HandleGetUpload(w http.ResponseWriter, r *http.Request) {
 					<td>1.169,56</td>
 				</tr>
 			</table>
+			</div>
 		</div>
 
 		<form method="POST" action="/upload" enctype="multipart/form-data">
+			<input type="hidden" name="csrf_token" value="%s">
 			<div class="form-group">
 				<label for="file">Select CSV File:</label>
 				<input type="file" id="file" name="file" accept=".csv" required>
-				<div class="file-info">Only .csv files are accepted</div>
+				<div class="file-info">Only .csv files are accepted, up to 10MB</div>
 			</div>
-			<button type="submit">Upload CSV</button>
+			<button class="btn" type="submit">Upload CSV</button>
 		</form>
-		<a href="/" class="dashboard-link">← Return to Dashboard</a>
+		<p><a href="/">← Return to Dashboard</a></p>
+	</div>
 	</div>
 </body>
-</html>`
+</html>`, html.EscapeString(platform.CSRFToken(r)))
 
-	fmt.Fprint(w, html)
+	fmt.Fprint(w, page)
 }
 
 // HandlePostUpload processes a CSV file upload.
@@ -331,97 +188,32 @@ func (h *Handler) renderUploadError(w http.ResponseWriter, errMsg string) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusBadRequest)
 
-	html := fmt.Sprintf(`<!DOCTYPE html>
+	page := fmt.Sprintf(`<!DOCTYPE html>
 <html>
 <head>
 	<title>Upload Error - Expense Tracking</title>
 	<meta charset="UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
-	<style>
-		* {
-			margin: 0;
-			padding: 0;
-			box-sizing: border-box;
-		}
-		body {
-			font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-			background: #f5f5f5;
-			padding: 20px;
-		}
-		.container {
-			max-width: 600px;
-			margin: 0 auto;
-			background: white;
-			border-radius: 8px;
-			box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-			padding: 40px;
-		}
-		.error-box {
-			background: #f8d7da;
-			border: 1px solid #f5c6cb;
-			color: #721c24;
-			padding: 15px;
-			border-radius: 4px;
-			margin-bottom: 25px;
-		}
-		.error-title {
-			font-weight: 600;
-			margin-bottom: 10px;
-			font-size: 16px;
-		}
-		.error-message {
-			font-size: 14px;
-			line-height: 1.5;
-		}
-		h1 {
-			color: #333;
-			margin-bottom: 10px;
-			font-size: 28px;
-		}
-		.subtitle {
-			color: #666;
-			margin-bottom: 25px;
-			font-size: 14px;
-		}
-		a {
-			color: #007bff;
-			text-decoration: none;
-		}
-		a:hover {
-			text-decoration: underline;
-		}
-		.back-link {
-			display: inline-block;
-			margin-top: 20px;
-			padding: 10px 20px;
-			background: #007bff;
-			color: white;
-			border-radius: 4px;
-			text-decoration: none;
-		}
-		.back-link:hover {
-			background: #0056b3;
-			text-decoration: none;
-		}
-	</style>
+	<link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-	<div class="container">
+	<div class="page">
+	<div class="card card--narrow">
 		<h1>Upload Failed</h1>
 		<p class="subtitle">There was an error processing your CSV file</p>
 
-		<div class="error-box">
-			<div class="error-title">Error Details:</div>
-			<div class="error-message">%s</div>
+		<div class="alert alert-error">
+			<strong>Error details:</strong> %s
 		</div>
 
 		<p>Please check your CSV file and try again.</p>
-		<a href="/upload" class="back-link">← Back to Upload</a>
+		<a class="btn" href="/upload">← Back to Upload</a>
+	</div>
 	</div>
 </body>
 </html>`, html.EscapeString(errMsg))
 
-	fmt.Fprint(w, html)
+	fmt.Fprint(w, page)
 }
 
 // renderUploadSuccess renders a success page with parsed expenses.
@@ -456,140 +248,19 @@ func (h *Handler) renderUploadSuccess(w http.ResponseWriter, filename string, ex
 	<title>Upload Successful - Expense Tracking</title>
 	<meta charset="UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
-	<style>
-		* {
-			margin: 0;
-			padding: 0;
-			box-sizing: border-box;
-		}
-		body {
-			font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-			background: #f5f5f5;
-			padding: 20px;
-		}
-		.container {
-			max-width: 800px;
-			margin: 0 auto;
-			background: white;
-			border-radius: 8px;
-			box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-			padding: 40px;
-		}
-		.success-box {
-			background: #d4edda;
-			border: 1px solid #c3e6cb;
-			color: #155724;
-			padding: 15px;
-			border-radius: 4px;
-			margin-bottom: 25px;
-		}
-		.success-title {
-			font-weight: 600;
-			margin-bottom: 5px;
-			font-size: 16px;
-		}
-		h1 {
-			color: #333;
-			margin-bottom: 10px;
-			font-size: 28px;
-		}
-		.subtitle {
-			color: #666;
-			margin-bottom: 20px;
-			font-size: 14px;
-		}
-		.summary {
-			background: #f9f9f9;
-			padding: 15px;
-			border-radius: 4px;
-			margin-bottom: 25px;
-			font-size: 14px;
-		}
-		.summary-row {
-			display: flex;
-			justify-content: space-between;
-			margin-bottom: 8px;
-		}
-		.summary-label {
-			font-weight: 500;
-			color: #666;
-		}
-		.summary-value {
-			color: #333;
-			font-weight: 600;
-		}
-		table {
-			width: 100%%;
-			border-collapse: collapse;
-			margin-bottom: 25px;
-			font-size: 13px;
-		}
-		th {
-			background: #f5f5f5;
-			color: #333;
-			font-weight: 600;
-			text-align: left;
-			padding: 12px;
-			border-bottom: 2px solid #ddd;
-		}
-		td {
-			padding: 10px 12px;
-			border-bottom: 1px solid #eee;
-		}
-		tr:hover {
-			background: #f9f9f9;
-		}
-		.text-right {
-			text-align: right;
-		}
-		.actions {
-			display: flex;
-			gap: 10px;
-		}
-		a, button {
-			display: inline-block;
-			padding: 10px 20px;
-			border-radius: 4px;
-			text-decoration: none;
-			border: none;
-			cursor: pointer;
-			font-size: 14px;
-			transition: background 0.2s;
-		}
-		.btn-primary {
-			background: #007bff;
-			color: white;
-		}
-		.btn-primary:hover {
-			background: #0056b3;
-		}
-		.btn-secondary {
-			background: #6c757d;
-			color: white;
-		}
-		.btn-secondary:hover {
-			background: #545b62;
-		}
-		.table-scroll {
-			overflow-x: auto;
-			margin-bottom: 20px;
-		}
-		table {
-			min-width: 640px;
-		}
-	</style>
+	<link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-	<div class="container">
+	<div class="page">
+	<div class="card">
 		<h1>CSV Upload Successful</h1>
 		<p class="subtitle">Your file has been parsed and is ready for review</p>
 
-		<div class="success-box">
-			<div class="success-title">✓ File processed successfully</div>
-			File: <strong>%s</strong>
+		<div class="alert alert-success">
+			<strong>&#10003; File processed successfully.</strong> File: %s
 		</div>
 
-		<div class="summary">
+		<div class="summary-box">
 			<div class="summary-row">
 				<span class="summary-label">Expenses parsed:</span>
 				<span class="summary-value">%d</span>
@@ -605,11 +276,11 @@ func (h *Handler) renderUploadSuccess(w http.ResponseWriter, filename string, ex
 		</div>
 
 		<div class="actions">
-			<a href="/upload" class="btn-secondary">← Upload Another File</a>
-			<a href="/" class="btn-primary">Go to Dashboard →</a>
+			<a href="/upload" class="btn btn-secondary">← Upload Another File</a>
+			<a href="/" class="btn">Go to Dashboard →</a>
 		</div>
 
-		<h2 style="font-size: 18px; margin-bottom: 15px; color: #333;">Parsed Expenses Preview</h2>
+		<h2>Parsed Expenses Preview</h2>
 		<div class="table-scroll">
 			<table>
 				<thead>
@@ -617,7 +288,7 @@ func (h *Handler) renderUploadSuccess(w http.ResponseWriter, filename string, ex
 						<th>Date</th>
 						<th>Description</th>
 						<th>Amount</th>
-						<th class="text-right">Balance</th>
+						<th>Balance</th>
 						<th>Category</th>
 						<th>Confidence</th>
 					</tr>
@@ -627,7 +298,7 @@ func (h *Handler) renderUploadSuccess(w http.ResponseWriter, filename string, ex
 				</tbody>
 			</table>
 		</div>
-
+	</div>
 	</div>
 </body>
 </html>`, html.EscapeString(filename), len(expenseList), skippedRows, savedCount, tableRows)

@@ -160,6 +160,67 @@ func TestUploadPersistsExpensesAcrossDatabaseReopen(t *testing.T) {
 	}
 }
 
+func TestHandleGetUploadRendersForm(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	handler := newTestHandler(logger, nil)
+
+	request := httptest.NewRequest(http.MethodGet, "/upload", nil)
+	response := httptest.NewRecorder()
+	handler.HandleGetUpload(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", response.Code)
+	}
+	if !bytes.Contains(response.Body.Bytes(), []byte(`enctype="multipart/form-data"`)) {
+		t.Fatalf("expected an upload form in the response, got %s", response.Body.String())
+	}
+}
+
+func TestHandlePostUploadRejectsMissingFile(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	handler := newTestHandler(logger, nil)
+
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	writer.Close() //nolint:errcheck // no fields needed; we're testing the missing-file path
+	request := httptest.NewRequest(http.MethodPost, "/upload", &body)
+	request.Header.Set("Content-Type", writer.FormDataContentType())
+	response := httptest.NewRecorder()
+	handler.HandlePostUpload(response, request)
+
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for a missing file, got %d", response.Code)
+	}
+	if !bytes.Contains(response.Body.Bytes(), []byte("No file provided")) {
+		t.Fatalf("expected a no-file error message, got %s", response.Body.String())
+	}
+}
+
+func TestHandlePostUploadRejectsNonCSVExtension(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	handler := newTestHandler(logger, nil)
+
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	part, err := writer.CreateFormFile("file", "expenses.txt")
+	if err != nil {
+		t.Fatalf("CreateFormFile failed: %v", err)
+	}
+	part.Write([]byte("not a csv")) //nolint:errcheck
+	writer.Close()
+	request := httptest.NewRequest(http.MethodPost, "/upload", &body)
+	request.Header.Set("Content-Type", writer.FormDataContentType())
+	response := httptest.NewRecorder()
+	handler.HandlePostUpload(response, request)
+
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for a non-.csv extension, got %d", response.Code)
+	}
+	if !bytes.Contains(response.Body.Bytes(), []byte("Invalid file extension")) {
+		t.Fatalf("expected an invalid-extension error message, got %s", response.Body.String())
+	}
+}
+
 func uploadRequest(t *testing.T, handler *Handler, csv string) *httptest.ResponseRecorder {
 	t.Helper()
 	var body bytes.Buffer

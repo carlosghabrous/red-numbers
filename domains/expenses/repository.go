@@ -368,6 +368,7 @@ func (r *Repository) GetByFilterOptions(ctx context.Context, options FilterOptio
 	expenses := make([]Expense, 0)
 	for rows.Next() {
 		var expense Expense
+		var fingerprint sql.NullString
 		if err := rows.Scan(
 			&expense.ID,
 			&expense.Date,
@@ -375,12 +376,15 @@ func (r *Repository) GetByFilterOptions(ctx context.Context, options FilterOptio
 			&expense.Amount,
 			&expense.Balance,
 			&expense.CategoryID,
-			&expense.Fingerprint,
+			&fingerprint,
 			&expense.ConfidenceLevel,
 			&expense.ImportedAt,
 			&expense.CorrectedAt,
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan expense: %w", err)
+		}
+		if fingerprint.Valid {
+			expense.Fingerprint = fingerprint.String
 		}
 		expenses = append(expenses, expense)
 	}
