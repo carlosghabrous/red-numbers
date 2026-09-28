@@ -658,6 +658,38 @@ tr:hover td {
 	padding-left: var(--space-3);
 }
 
+/* --- Histograms (weekly/monthly stacked bar charts) ------------------------ */
+
+.histogram-scroll {
+	overflow-x: auto;
+	-webkit-overflow-scrolling: touch;
+}
+
+.histogram-chart {
+	display: block;
+	height: 250px;
+}
+
+.hist-axis,
+.hist-gridline {
+	stroke: var(--color-border-light);
+	stroke-width: 1;
+}
+
+.hist-axis {
+	stroke: var(--color-border);
+}
+
+.hist-axis-label {
+	font-size: 10px;
+	fill: var(--color-text-faint);
+}
+
+.hist-bar {
+	stroke: #fff;
+	stroke-width: 1;
+}
+
 /* --- Pagination ------------------------------------------------------------ */
 
 .pagination {
@@ -791,6 +823,10 @@ dd {
 		max-width: 220px;
 		height: auto;
 		margin: 0 auto;
+	}
+
+	.histogram-chart {
+		height: 190px;
 	}
 
 	.actions {

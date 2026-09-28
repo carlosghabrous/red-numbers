@@ -488,6 +488,47 @@ func (r *Repository) GetCategoryBreakdown(ctx context.Context, options FilterOpt
 	return breakdown, nil
 }
 
+// SpendingEntry is one outgoing transaction's date, amount, and category,
+// used as the raw input for the weekly/monthly histograms. Week/month
+// bucketing happens in Go (see histogram.go) rather than in SQL, since
+// SQLite's week-of-year functions don't cleanly express a Monday-start week
+// across year boundaries.
+type SpendingEntry struct {
+	Date       time.Time
+	Amount     float64
+	CategoryID int64
+}
+
+// GetSpendingEntries returns every outgoing (negative-amount) transaction
+// matching the filters, for histogram aggregation. Like Statistics and
+// GetCategoryBreakdown, incoming transactions never count as "spending".
+func (r *Repository) GetSpendingEntries(ctx context.Context, options FilterOptions) ([]SpendingEntry, error) {
+	conditions, args := filterConditions(options)
+	conditions = append(conditions, "e.amount < 0")
+	query := `
+		SELECT e.date, -e.amount, COALESCE(e.category_id, 0)
+		FROM expenses e` + whereClauseFrom(conditions) + `
+		ORDER BY e.date ASC`
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query spending entries: %w", err)
+	}
+	defer rows.Close()
+
+	entries := make([]SpendingEntry, 0)
+	for rows.Next() {
+		var entry SpendingEntry
+		if err := rows.Scan(&entry.Date, &entry.Amount, &entry.CategoryID); err != nil {
+			return nil, fmt.Errorf("failed to scan spending entry: %w", err)
+		}
+		entries = append(entries, entry)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate spending entries: %w", err)
+	}
+	return entries, nil
+}
+
 func max(first, second int) int {
 	if first > second {
 		return first

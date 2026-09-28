@@ -172,3 +172,51 @@ func TestDashboardPieChartReflectsFilters(t *testing.T) {
 		t.Fatalf("expected empty chart message, got body=%s", emptyResponse.Body.String())
 	}
 }
+
+func TestDashboardHistogramsReflectFilters(t *testing.T) {
+	db, err := sql.Open("sqlite3", ":memory:")
+	if err != nil {
+		t.Fatalf("open database: %v", err)
+	}
+	defer db.Close()
+	_, err = db.Exec(`
+		CREATE TABLE categories (id INTEGER PRIMARY KEY, name TEXT, display_name TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
+		CREATE TABLE expenses (id INTEGER PRIMARY KEY, date DATE, description TEXT, amount REAL, balance REAL, fingerprint TEXT, category_id INTEGER, confidence_level TEXT, imported_at TIMESTAMP, corrected_at TIMESTAMP);
+		CREATE TABLE audit_log (id INTEGER PRIMARY KEY, timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP, action TEXT, expense_id INTEGER, old_value TEXT, new_value TEXT, details TEXT);
+		INSERT INTO categories (id, name, display_name) VALUES (1, 'casa', 'Casa'), (2, 'ocio', 'Ocio');
+		INSERT INTO expenses (id, date, description, amount, balance, fingerprint, category_id, confidence_level, imported_at) VALUES
+			(1, '2026-01-05 00:00:00+00:00', 'Rent', -75, 100, 'fp1', 1, 'high', '2026-01-05 00:00:00+00:00'),
+			(2, '2026-02-06 00:00:00+00:00', 'Cinema', -25, 70, 'fp2', 2, 'high', '2026-02-06 00:00:00+00:00');`)
+	if err != nil {
+		t.Fatalf("create dashboard schema: %v", err)
+	}
+	deps := platform.Dependencies{Logger: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	service := NewService(NewRepository(db), categories.NewRepository(db))
+	handler := NewHandler(deps, service)
+
+	unfiltered := httptest.NewRequest(http.MethodGet, "/", nil)
+	unfilteredResponse := httptest.NewRecorder()
+	handler.HandleGetDashboard(unfilteredResponse, unfiltered)
+	body := unfilteredResponse.Body.String()
+	if !strings.Contains(body, "Weekly Spending") || !strings.Contains(body, "Monthly Spending") {
+		t.Fatalf("expected both histogram sections on the dashboard, got body=%s", body)
+	}
+	if !strings.Contains(body, "05/01/2026") || !strings.Contains(body, "Jan 2026") || !strings.Contains(body, "Feb 2026") {
+		t.Fatalf("expected both weeks/months represented, got body=%s", body)
+	}
+
+	filtered := httptest.NewRequest(http.MethodGet, "/?category=1", nil)
+	filteredResponse := httptest.NewRecorder()
+	handler.HandleGetDashboard(filteredResponse, filtered)
+	filteredBody := filteredResponse.Body.String()
+	if !strings.Contains(filteredBody, "05/01/2026") || strings.Contains(filteredBody, "Feb 2026") {
+		t.Fatalf("expected the category filter to drop the Ocio-only February bar, got body=%s", filteredBody)
+	}
+
+	dateFiltered := httptest.NewRequest(http.MethodGet, "/?date_filter=custom&start_date=2030-01-01&end_date=2030-02-01", nil)
+	dateFilteredResponse := httptest.NewRecorder()
+	handler.HandleGetDashboard(dateFilteredResponse, dateFiltered)
+	if !strings.Contains(dateFilteredResponse.Body.String(), "No spending data in range.") {
+		t.Fatalf("expected an empty-histogram message for a date range with no expenses, got body=%s", dateFilteredResponse.Body.String())
+	}
+}

@@ -99,22 +99,19 @@ go run main.go
 - ✅ Slice 8: Summary Statistics Widget
 - ✅ Slice 9: Pie Chart Visualization
 - ✅ Slice 10: Re-Classification & Polish
+- ✅ Slice 11: Weekly and Monthly Histograms
 
 **Next to implement:**
-- 🔲 Slice 11: Weekly and Monthly Histograms
+- 🔲 None — all 11 slices are implemented. Final checkpoint (task 11.12: full
+  regression pass + user approval) is the only remaining item.
 
 ## What to Implement Next
 
-Continue with **Slice 11: Weekly and Monthly Histograms**
-
-Slices 1 through 10 established upload, persistence, classification, sorting,
-filtering, correction with automatic re-classification, statistics, a pie
-chart, and production polish (styling, CSRF/security headers, tests, docs).
-The next slice adds weekly and monthly bar charts showing spending trends by
-category.
-
-**Success:** Dashboard shows weekly and monthly histograms that update with
-the active filters, alongside the existing pie chart.
+All planned slices are complete. What's left is the final checkpoint task
+(11.12 in `tasks.md`): a last full-suite regression run and sign-off from the
+project owner. If new work is wanted beyond the original 11 slices (e.g.
+bar-click filtering, CSV export, multi-user support), scope it as a new slice
+following the same vertical-slice pattern used throughout this guide.
 
 ## Development Flow
 

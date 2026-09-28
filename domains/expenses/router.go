@@ -57,7 +57,7 @@ func (h *Handler) HandleGetDashboard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.renderDashboard(w, data.Expenses, data.CategoryNames, data.Categories, data.Statistics, data.PieSlices, sortBy, sortDirection, filterState, page, data.TotalExpenses, r.URL.RawQuery, platform.CSRFToken(r))
+	h.renderDashboard(w, data.Expenses, data.CategoryNames, data.Categories, data.Statistics, data.PieSlices, data.WeeklyHistogram, data.MonthlyHistogram, sortBy, sortDirection, filterState, page, data.TotalExpenses, r.URL.RawQuery, platform.CSRFToken(r))
 }
 
 // HandlePostDeleteAll removes every imported expense after explicit confirmation.
@@ -159,7 +159,7 @@ func (h *Handler) renderError(w http.ResponseWriter, errMsg string) {
 <body><h1>Something went wrong</h1><p>%s</p><a href="/">Back to dashboard</a></body></html>`, html.EscapeString(errMsg))
 }
 
-func (h *Handler) renderDashboard(w http.ResponseWriter, expenseList []Expense, categoryNames map[int64]string, categoryList []categories.Category, stats Statistics, pieSlices []PieSlice, sortBy, sortDirection string, filterState dashboardFilterState, page, totalExpenses int, listQuery, csrfToken string) {
+func (h *Handler) renderDashboard(w http.ResponseWriter, expenseList []Expense, categoryNames map[int64]string, categoryList []categories.Category, stats Statistics, pieSlices []PieSlice, weeklyHistogram, monthlyHistogram Histogram, sortBy, sortDirection string, filterState dashboardFilterState, page, totalExpenses int, listQuery, csrfToken string) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 
@@ -199,6 +199,8 @@ func (h *Handler) renderDashboard(w http.ResponseWriter, expenseList []Expense, 
 			%s
 			%s
 			%s
+			%s
+			%s
 			<div class="table-actions">
 				<form method="post" action="/expenses/delete-all" onsubmit="return confirm('Delete all expenses and classification logs?');">
 					<input type="hidden" name="csrf_token" value="%s">
@@ -220,6 +222,8 @@ func (h *Handler) renderDashboard(w http.ResponseWriter, expenseList []Expense, 
 		renderDashboardFilters(categoryList, filterState),
 		renderSummaryStatistics(stats, categoryNames),
 		renderPieChart(pieSlices),
+		renderHistogram("Weekly Spending", weeklyHistogram),
+		renderHistogram("Monthly Spending", monthlyHistogram),
 		html.EscapeString(csrfToken),
 		renderSortableHeader("date", "Date", listQuery, sortBy, sortDirection),
 		renderSortableHeader("description", "Description", listQuery, sortBy, sortDirection),
@@ -401,6 +405,73 @@ func renderPieChart(slices []PieSlice) string {
 			<ul class="chart-legend">%s</ul>
 		</div>
 	</div>`, paths, legend)
+}
+
+// Histogram bar geometry, shared by the weekly and monthly charts.
+const (
+	histBarWidth     = 36.0
+	histBarGap       = 24.0
+	histChartHeight  = 200.0
+	histTopPadding   = 10.0
+	histLeftPadding  = 60.0
+	histBottomLabels = 40.0
+	histGridlines    = 4
+)
+
+// renderHistogram draws title as a stacked-bar SVG chart: one column per
+// period, one colored segment per category. Bars are wrapped in a
+// horizontally scrolling container (like the expense table) so many periods
+// stay readable on narrow screens instead of shrinking to illegible widths,
+// per requirement 15.4's explicit "horizontal scroll or reduce bar width"
+// allowance.
+func renderHistogram(title string, histogram Histogram) string {
+	if len(histogram.Periods) == 0 || histogram.MaxTotal <= 0 {
+		return fmt.Sprintf(`<div class="chart-card"><h2 class="chart-title">%s</h2><div class="stats-empty">No spending data in range.</div></div>`, html.EscapeString(title))
+	}
+
+	chartWidth := histLeftPadding + float64(len(histogram.Periods))*(histBarWidth+histBarGap) + histBarGap
+	chartHeight := histTopPadding + histChartHeight + histBottomLabels
+	rawMax := histogram.MaxTotal / 1.1
+
+	gridlines := ""
+	for step := 0; step <= histGridlines; step++ {
+		fraction := float64(step) / float64(histGridlines)
+		y := histTopPadding + histChartHeight*(1-fraction)
+		amount := rawMax * fraction
+		gridlines += fmt.Sprintf(`<line class="hist-gridline" x1="%.2f" y1="%.2f" x2="%.2f" y2="%.2f"/><text class="hist-axis-label" x="%.2f" y="%.2f" text-anchor="end">%.0f€</text>`,
+			histLeftPadding, y, chartWidth, y, histLeftPadding-8, y+4, amount)
+	}
+
+	bars := ""
+	xLabels := ""
+	for index, period := range histogram.Periods {
+		x := histLeftPadding + histBarGap + float64(index)*(histBarWidth+histBarGap)
+		cumulative := 0.0
+		for _, bar := range period.Bars {
+			if bar.Amount <= 0 {
+				continue
+			}
+			barHeight := bar.Amount / histogram.MaxTotal * histChartHeight
+			y := histTopPadding + histChartHeight - cumulative - barHeight
+			bars += fmt.Sprintf(`<rect class="hist-bar" x="%.2f" y="%.2f" width="%.2f" height="%.2f" fill="%s"><title>%s · %s: %.2f€</title></rect>`,
+				x, y, histBarWidth, barHeight, bar.Color, html.EscapeString(period.Label), html.EscapeString(bar.CategoryName), bar.Amount)
+			cumulative += barHeight
+		}
+		xLabels += fmt.Sprintf(`<text class="hist-axis-label" x="%.2f" y="%.2f" text-anchor="middle">%s</text>`,
+			x+histBarWidth/2, histTopPadding+histChartHeight+18, html.EscapeString(period.Label))
+	}
+
+	return fmt.Sprintf(`<div class="chart-card">
+		<h2 class="chart-title">%s</h2>
+		<div class="histogram-scroll">
+			<svg class="histogram-chart" viewBox="0 0 %.2f %.2f" width="%.2f" role="img" aria-label="%s">
+				<line class="hist-axis" x1="%.2f" y1="%.2f" x2="%.2f" y2="%.2f"/>
+				%s%s%s
+			</svg>
+		</div>
+	</div>`, html.EscapeString(title), chartWidth, chartHeight, chartWidth, html.EscapeString(title),
+		histLeftPadding, histTopPadding, histLeftPadding, histTopPadding+histChartHeight,
+		gridlines, bars, xLabels)
 }
 
 func renderDashboardFilters(categoryList []categories.Category, state dashboardFilterState) string {

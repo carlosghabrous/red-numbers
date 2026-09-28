@@ -668,74 +668,74 @@ This document organizes the expense tracking application implementation into 11 
 
 ### Tasks
 
-- [~] 11.1 Create histogram data preparation service
+- [x] 11.1 Create histogram data preparation service
   - Create method to aggregate expenses by week (Mon-Sun)
   - Create method to aggregate expenses by month
   - Calculate totals per category per period
   - Sort periods chronologically
   - _Requirements: 9.0, 10.0_
 
-- [~] 11.2 Implement weekly histogram rendering
+- [x] 11.2 Implement weekly histogram rendering
   - Create SVG bar chart generator for weekly data
   - Calculate bar dimensions and positions
   - Stack or group bars by category
   - Assign consistent colors to categories
   - _Requirements: 9.0, 14.0_
 
-- [~] 11.3 Implement monthly histogram rendering
+- [x] 11.3 Implement monthly histogram rendering
   - Create SVG bar chart generator for monthly data
   - Calculate bar dimensions and positions
   - Stack or group bars by category
   - Use same color scheme as weekly chart
   - _Requirements: 10.0, 14.0_
 
-- [~] 11.4 Add axes and labels to histograms
+- [x] 11.4 Add axes and labels to histograms
   - Display x-axis with week/month labels
   - Display y-axis with amount scale
   - Add axis labels and gridlines if needed
   - Format y-axis scale appropriately
   - _Requirements: 9.0, 10.0, 14.0_
 
-- [~] 11.5 Implement tooltips for histogram bars
+- [x] 11.5 Implement tooltips for histogram bars
   - Show week/month, category, and amount on hover
   - Position tooltip near cursor
   - Update position on mouse move
   - _Requirements: 9.0, 10.0, 14.0_
 
-- [~] 11.6 Integrate histograms into dashboard
+- [x] 11.6 Integrate histograms into dashboard
   - Add weekly histogram section to dashboard
   - Add monthly histogram section to dashboard
   - Call data preparation services on page load
   - Render charts into page with proper spacing
   - _Requirements: 9.0, 10.0, 14.0_
 
-- [~] 11.7 Make histograms responsive for mobile
+- [x] 11.7 Make histograms responsive for mobile
   - Reduce chart size on screens < 768px
   - Stack charts vertically on mobile
   - Reduce bar width to prevent overflow
   - Ensure all labels readable
   - _Requirements: 9.0, 10.0, 15.0_
 
-- [~] 11.8 Update histograms when filters change
+- [x] 11.8 Update histograms when filters change
   - Re-calculate chart data when filters applied
   - Update chart display with new data
   - Handle case where no expenses in time range
   - _Requirements: 9.0, 10.0, 6.0, 7.0_
 
-- [ ]* 11.9 Write unit tests for histogram data aggregation
+- [x]* 11.9 Write unit tests for histogram data aggregation
   - Test weekly aggregation with various dates
   - Test monthly aggregation with various dates
   - Test category subtotals per period
   - Test edge cases (week boundaries, year boundaries)
   - _Requirements: 9.0, 10.0_
 
-- [ ]* 11.10 Write unit tests for histogram rendering
+- [x]* 11.10 Write unit tests for histogram rendering
   - Test SVG generation for various data shapes
   - Test bar positioning and sizing
   - Test axis label formatting
   - _Requirements: 9.0, 10.0_
 
-- [ ]* 11.11 Write integration test for histogram display
+- [x]* 11.11 Write integration test for histogram display
   - Load dashboard, verify weekly and monthly charts visible
   - Apply date range filter, verify charts update
   - Apply category filter, verify bars update

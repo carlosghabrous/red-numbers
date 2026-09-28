@@ -220,6 +220,42 @@ func TestExpenseRepositoryGetCategoryBreakdown(t *testing.T) {
 	}
 }
 
+func TestExpenseRepositoryGetSpendingEntries(t *testing.T) {
+	db := newExpenseTestDB(t)
+	repository := NewRepository(db)
+	baseDate := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
+	expenseList := []Expense{
+		{Date: baseDate, Description: "Casa rent", Amount: -50, Balance: 1, CategoryID: 1, ImportedAt: baseDate},
+		{Date: baseDate.AddDate(0, 0, 1), Description: "Ocio cinema", Amount: -30, Balance: 1, CategoryID: 2, ImportedAt: baseDate},
+		{Date: baseDate.AddDate(0, 0, 2), Description: "Salary", Amount: 1500, Balance: 1, CategoryID: 3, ImportedAt: baseDate},
+	}
+	if err := repository.CreateBatch(context.Background(), expenseList); err != nil {
+		t.Fatalf("CreateBatch failed: %v", err)
+	}
+
+	entries, err := repository.GetSpendingEntries(context.Background(), FilterOptions{})
+	if err != nil {
+		t.Fatalf("GetSpendingEntries failed: %v", err)
+	}
+	if len(entries) != 2 {
+		t.Fatalf("expected only the 2 negative-amount rows (income excluded), got %d: %+v", len(entries), entries)
+	}
+	if entries[0].Amount != 50 || entries[0].CategoryID != 1 {
+		t.Errorf("expected the first entry's amount sign flipped to positive (50, Casa), got %+v", entries[0])
+	}
+	if !entries[0].Date.Before(entries[1].Date) {
+		t.Errorf("expected entries ordered chronologically, got %+v then %+v", entries[0], entries[1])
+	}
+
+	filtered, err := repository.GetSpendingEntries(context.Background(), FilterOptions{CategoryIDs: []int64{2}})
+	if err != nil {
+		t.Fatalf("GetSpendingEntries with filter failed: %v", err)
+	}
+	if len(filtered) != 1 || filtered[0].CategoryID != 2 {
+		t.Fatalf("expected only the Ocio entry, got %+v", filtered)
+	}
+}
+
 func TestExpenseRepositoryPagination(t *testing.T) {
 	db := newExpenseTestDB(t)
 	repository := NewRepository(db)
