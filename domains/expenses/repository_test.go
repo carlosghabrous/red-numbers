@@ -155,6 +155,9 @@ func TestExpenseRepositoryGetStatistics(t *testing.T) {
 	if stats.TotalSpending != 100 {
 		t.Errorf("expected total spending 100, got %v", stats.TotalSpending)
 	}
+	if stats.TotalIncome != 100 {
+		t.Errorf("expected total income 100 (the salary transfer), got %v", stats.TotalIncome)
+	}
 	if got := stats.AverageSpending; got < 33.32 || got > 33.34 {
 		t.Errorf("expected average spending ~33.33, got %v", got)
 	}
@@ -166,7 +169,7 @@ func TestExpenseRepositoryGetStatistics(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetStatistics with category filter failed: %v", err)
 	}
-	if filteredStats.TransactionCount != 3 || filteredStats.SpendingCount != 2 || filteredStats.TotalSpending != 70 {
+	if filteredStats.TransactionCount != 3 || filteredStats.SpendingCount != 2 || filteredStats.TotalSpending != 70 || filteredStats.TotalIncome != 100 {
 		t.Errorf("unexpected filtered statistics: %+v", filteredStats)
 	}
 
@@ -175,7 +178,7 @@ func TestExpenseRepositoryGetStatistics(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetStatistics with no matches failed: %v", err)
 	}
-	if emptyStats.TransactionCount != 0 || emptyStats.TotalSpending != 0 || emptyStats.AverageSpending != 0 {
+	if emptyStats.TransactionCount != 0 || emptyStats.TotalSpending != 0 || emptyStats.TotalIncome != 0 || emptyStats.AverageSpending != 0 {
 		t.Errorf("expected zeroed statistics for empty result, got %+v", emptyStats)
 	}
 }

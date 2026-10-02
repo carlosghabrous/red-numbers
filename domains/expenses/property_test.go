@@ -97,10 +97,13 @@ func TestPropertyStatisticsAreConsistentWithFilteredResults(t *testing.T) {
 		wantCount := len(results)
 		wantSpendingCount := 0
 		wantTotal := 0.0
+		wantIncome := 0.0
 		for _, expense := range results {
 			if expense.Amount < 0 {
 				wantSpendingCount++
 				wantTotal += -expense.Amount
+			} else if expense.Amount > 0 {
+				wantIncome += expense.Amount
 			}
 		}
 
@@ -109,6 +112,9 @@ func TestPropertyStatisticsAreConsistentWithFilteredResults(t *testing.T) {
 		}
 		if stats.SpendingCount != wantSpendingCount {
 			t.Errorf("filters=%+v: SpendingCount=%d, want %d", options, stats.SpendingCount, wantSpendingCount)
+		}
+		if diff := stats.TotalIncome - wantIncome; diff > 0.001 || diff < -0.001 {
+			t.Errorf("filters=%+v: TotalIncome=%v, want %v", options, stats.TotalIncome, wantIncome)
 		}
 		if diff := stats.TotalSpending - wantTotal; diff > 0.001 || diff < -0.001 {
 			t.Errorf("filters=%+v: TotalSpending=%v, want %v", options, stats.TotalSpending, wantTotal)

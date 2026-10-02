@@ -412,12 +412,13 @@ type Statistics struct {
 	TransactionCount  int
 	SpendingCount     int
 	TotalSpending     float64
+	TotalIncome       float64
 	AverageSpending   float64
 	TopCategoryID     int64
 	TopCategoryAmount float64
 }
 
-// GetStatistics computes spending totals and the top category for the given filters.
+// GetStatistics computes spending/income totals and the top category for the given filters.
 func (r *Repository) GetStatistics(ctx context.Context, options FilterOptions) (Statistics, error) {
 	conditions, args := filterConditions(options)
 	whereClause := whereClauseFrom(conditions)
@@ -427,10 +428,11 @@ func (r *Repository) GetStatistics(ctx context.Context, options FilterOptions) (
 		SELECT
 			COUNT(*),
 			COUNT(CASE WHEN e.amount < 0 THEN 1 END),
-			COALESCE(SUM(CASE WHEN e.amount < 0 THEN -e.amount ELSE 0 END), 0)
+			COALESCE(SUM(CASE WHEN e.amount < 0 THEN -e.amount ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN e.amount > 0 THEN e.amount ELSE 0 END), 0)
 		FROM expenses e` + whereClause
 	if err := r.db.QueryRowContext(ctx, overallQuery, args...).Scan(
-		&stats.TransactionCount, &stats.SpendingCount, &stats.TotalSpending,
+		&stats.TransactionCount, &stats.SpendingCount, &stats.TotalSpending, &stats.TotalIncome,
 	); err != nil {
 		return Statistics{}, fmt.Errorf("failed to calculate expense statistics: %w", err)
 	}

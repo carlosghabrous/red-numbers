@@ -378,10 +378,11 @@ func renderSummaryStatistics(stats Statistics, categoryNames map[int64]string) s
 	}
 	return fmt.Sprintf(`<div class="stats-grid">
 		<div class="stat-card"><span class="stat-label">Total Spending</span><span class="stat-value">%.2f€</span></div>
+		<div class="stat-card"><span class="stat-label">Income</span><span class="stat-value">%.2f€</span></div>
 		<div class="stat-card"><span class="stat-label">Transactions</span><span class="stat-value">%d</span></div>
 		<div class="stat-card"><span class="stat-label">Average Spend</span><span class="stat-value">%.2f€</span></div>
 		%s
-	</div>`, stats.TotalSpending, stats.TransactionCount, stats.AverageSpending, topCategoryCard)
+	</div>`, stats.TotalSpending, stats.TotalIncome, stats.TransactionCount, stats.AverageSpending, topCategoryCard)
 }
 
 // renderPieChart renders the category breakdown pie chart and its legend. Each

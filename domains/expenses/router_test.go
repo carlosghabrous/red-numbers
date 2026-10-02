@@ -113,6 +113,9 @@ func TestDashboardStatisticsWidgetReflectsFilters(t *testing.T) {
 	if unfilteredResponse.Code != http.StatusOK || !strings.Contains(body, "80.00€") || !strings.Contains(body, "stat-value\">Casa<") {
 		t.Fatalf("expected total spending 80.00€ with top category Casa, got status=%d body=%s", unfilteredResponse.Code, body)
 	}
+	if !strings.Contains(body, `<span class="stat-label">Income</span><span class="stat-value">200.00€</span>`) {
+		t.Fatalf("expected an Income stat card showing 200.00€, got body=%s", body)
+	}
 
 	filtered := httptest.NewRequest(http.MethodGet, "/?category=2", nil)
 	filteredResponse := httptest.NewRecorder()
