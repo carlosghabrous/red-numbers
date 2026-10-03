@@ -8,7 +8,6 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/ghab/red-numbers/domains/categories"
 	"github.com/ghab/red-numbers/platform"
@@ -185,6 +184,7 @@ func (h *Handler) renderDashboard(w http.ResponseWriter, expenseList []Expense, 
 	<meta charset="UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
 	<link rel="stylesheet" href="/static/style.css">
+	<script src="/static/app.js" defer></script>
 </head>
 <body>
 	<div class="page">
@@ -202,7 +202,7 @@ func (h *Handler) renderDashboard(w http.ResponseWriter, expenseList []Expense, 
 			%s
 			%s
 			<div class="table-actions">
-				<form method="post" action="/expenses/delete-all" onsubmit="return confirm('Delete all expenses and classification logs?');">
+				<form method="post" action="/expenses/delete-all" class="js-confirm-delete-all">
 					<input type="hidden" name="csrf_token" value="%s">
 					<input type="hidden" name="confirm" value="delete-all">
 					<button class="btn btn-danger" type="submit">Delete all records</button>
@@ -496,15 +496,10 @@ func renderDashboardFilters(categoryList []categories.Category, state dashboardF
 	default:
 		categorySummary = fmt.Sprintf("%d categories selected", len(state.options.CategoryIDs))
 	}
+	// state.endInput is always the correct inclusive display value: blank for
+	// "all", and explicitly set by dashboardFilterStateFromRequest for
+	// "current", "previous", and "custom".
 	endInput := state.endInput
-	if endInput == "" && state.dateMode != "all" {
-		endInput = state.endDate
-		if endInput != "" {
-			if end, err := time.Parse("2006-01-02", endInput); err == nil {
-				endInput = end.AddDate(0, 0, -1).Format("2006-01-02")
-			}
-		}
-	}
 	dateLabel := "All Dates"
 	switch state.dateMode {
 	case "current":
@@ -528,9 +523,9 @@ func renderDashboardFilters(categoryList []categories.Category, state dashboardF
 			<div class="filter-group">
 				<span class="filter-label">Date range</span>
 				<div class="segmented">
-					<label><input type="radio" name="date_filter" value="all"%s><span>All Dates</span></label>
-					<label><input type="radio" name="date_filter" value="current"%s><span>Current Month</span></label>
-					<label><input type="radio" name="date_filter" value="previous"%s><span>Previous Month</span></label>
+					<label><input type="radio" name="date_filter" value="all" class="js-auto-apply"%s><span>All Dates</span></label>
+					<label><input type="radio" name="date_filter" value="current" class="js-auto-apply"%s><span>Current Month</span></label>
+					<label><input type="radio" name="date_filter" value="previous" class="js-auto-apply"%s><span>Previous Month</span></label>
 				</div>
 				<div class="date-range-inputs">
 					<input type="date" name="start_date" value="%s">

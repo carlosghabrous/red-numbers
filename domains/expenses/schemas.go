@@ -86,14 +86,20 @@ func dashboardFilterStateFromRequest(r *http.Request) (dashboardFilterState, err
 	case "all":
 		return state, nil
 	case "current":
-		state.startDate = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location()).Format("2006-01-02")
-		state.endDate = time.Date(now.Year(), now.Month()+1, 1, 0, 0, 0, 0, now.Location()).Format("2006-01-02")
-		state.endInput = state.endDate
+		monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+		nextMonthStart := monthStart.AddDate(0, 1, 0)
+		state.startDate = monthStart.Format("2006-01-02")
+		state.endDate = nextMonthStart.Format("2006-01-02") // exclusive, used for the SQL range
+		// endInput is explicitly overwritten (not left blank) so a stale
+		// end_date carried over from whatever filter was active before this
+		// one was selected can never leak into the displayed field.
+		state.endInput = nextMonthStart.AddDate(0, 0, -1).Format("2006-01-02") // inclusive, for display
 	case "previous":
-		first := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
-		state.startDate = first.AddDate(0, -1, 0).Format("2006-01-02")
-		state.endDate = first.Format("2006-01-02")
-		state.endInput = state.endDate
+		monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+		previousMonthStart := monthStart.AddDate(0, -1, 0)
+		state.startDate = previousMonthStart.Format("2006-01-02")
+		state.endDate = monthStart.Format("2006-01-02")                    // exclusive
+		state.endInput = monthStart.AddDate(0, 0, -1).Format("2006-01-02") // inclusive, for display
 	case "custom":
 		if state.startDate == "" || state.endInput == "" {
 			return state, fmt.Errorf("both a start date and an end date are required to filter by date range")
