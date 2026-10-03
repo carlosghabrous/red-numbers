@@ -1,6 +1,7 @@
 package upload
 
 import (
+	"bytes"
 	"encoding/csv"
 	"fmt"
 	"os"
@@ -10,6 +11,10 @@ import (
 
 	"github.com/ghab/red-numbers/domains/expenses"
 )
+
+// candidateDelimiters are tried in order; different banks export with
+// either a semicolon or a comma as the field separator.
+var candidateDelimiters = []rune{';', ','}
 
 // CSVParser handles parsing and validation of CSV files.
 type CSVParser struct{}
@@ -31,32 +36,39 @@ func (p *CSVParser) ParseCSVFile(filePath string) ([]expenses.Expense, error) {
 
 // ParseCSVFileWithStats parses a CSV file and reports rows skipped during parsing.
 func (p *CSVParser) ParseCSVFileWithStats(filePath string) ([]expenses.Expense, int, error) {
-	file, err := os.Open(filePath)
+	data, err := os.ReadFile(filePath)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to open CSV file: %w", err)
 	}
-	defer file.Close()
 
-	reader := csv.NewReader(file)
-	reader.Comma = ';'
-	reader.Comment = '#'
-	reader.FieldsPerRecord = -1
-
-	// Read all records
-	records, err := reader.ReadAll()
-	if err != nil {
-		return nil, 0, fmt.Errorf("failed to read CSV file: %w", err)
+	// Different banks export with different field separators (semicolon or
+	// comma); try each until one yields a row with all required headers,
+	// rather than assuming a single fixed delimiter.
+	var records [][]string
+	var headerIdx int
+	var headerMap map[string]int
+	var lastErr error
+	found := false
+	for _, delimiter := range candidateDelimiters {
+		candidateRecords, err := readCSVRecords(data, delimiter)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		idx, columnMap, err := p.findHeaderRow(candidateRecords)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		records, headerIdx, headerMap = candidateRecords, idx, columnMap
+		found = true
+		break
 	}
-
-	if len(records) == 0 {
-		return nil, 0, fmt.Errorf("CSV file is empty")
-	}
-
-	// Find and validate the header row. Bank exports may contain metadata rows
-	// before the transaction table.
-	headerIdx, headerMap, err := p.findHeaderRow(records)
-	if err != nil {
-		return nil, 0, err
+	if !found {
+		if lastErr == nil {
+			lastErr = fmt.Errorf("CSV file is empty")
+		}
+		return nil, 0, lastErr
 	}
 
 	// Parse data rows
@@ -85,6 +97,9 @@ func (p *CSVParser) ParseCSVFileWithStats(filePath string) ([]expenses.Expense, 
 }
 
 func (p *CSVParser) findHeaderRow(records [][]string) (int, map[string]int, error) {
+	if len(records) == 0 {
+		return 0, nil, fmt.Errorf("CSV file is empty")
+	}
 	var lastErr error
 	for rowIdx, row := range records {
 		headerMap, err := p.validateHeaders(row)
@@ -95,6 +110,20 @@ func (p *CSVParser) findHeaderRow(records [][]string) (int, map[string]int, erro
 	}
 
 	return 0, nil, lastErr
+}
+
+// readCSVRecords parses data as CSV using the given field delimiter.
+func readCSVRecords(data []byte, delimiter rune) ([][]string, error) {
+	reader := csv.NewReader(bytes.NewReader(data))
+	reader.Comma = delimiter
+	reader.Comment = '#'
+	reader.FieldsPerRecord = -1
+
+	records, err := reader.ReadAll()
+	if err != nil {
+		return nil, fmt.Errorf("failed to read CSV file: %w", err)
+	}
+	return records, nil
 }
 
 // validateHeaders checks that all required columns are present and returns a column index map.

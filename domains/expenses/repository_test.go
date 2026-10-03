@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ghab/red-numbers/domains/classification"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -392,6 +393,72 @@ func TestExpenseRepositoryUpdateCategoryReclassifiesSimilarExpenses(t *testing.T
 	var reclassifiedCount int
 	if err := db.QueryRow(`SELECT COUNT(*) FROM audit_log WHERE action = 're_classification'`).Scan(&reclassifiedCount); err != nil || reclassifiedCount != 1 {
 		t.Fatalf("expected one re_classification audit entry, got count=%d err=%v", reclassifiedCount, err)
+	}
+}
+
+func TestExpenseRepositoryGetLearnedCategories(t *testing.T) {
+	db := newExpenseTestDB(t)
+	repository := NewRepository(db)
+	baseDate := time.Now()
+
+	corrected := Expense{Date: baseDate, Description: "NETFLIX MENSUAL", Amount: -10, Balance: 1, ImportedAt: baseDate, CategoryID: 1}
+	uncorrected := Expense{Date: baseDate, Description: "SPOTIFY PREMIUM", Amount: -10, Balance: 1, ImportedAt: baseDate, CategoryID: 1}
+	for _, expense := range []*Expense{&corrected, &uncorrected} {
+		if err := repository.Create(context.Background(), expense); err != nil {
+			t.Fatalf("Create failed: %v", err)
+		}
+	}
+
+	// Manually correct one expense (category 2 = ocio); this sets corrected_at,
+	// which is what marks it as "learned" knowledge.
+	if _, err := repository.UpdateCategory(context.Background(), corrected.ID, 2); err != nil {
+		t.Fatalf("UpdateCategory failed: %v", err)
+	}
+
+	learned, err := repository.GetLearnedCategories(context.Background())
+	if err != nil {
+		t.Fatalf("GetLearnedCategories failed: %v", err)
+	}
+	if got := learned[classification.NormalizeDescription("Netflix  mensual")]; got != "ocio" {
+		t.Fatalf("expected the corrected description to map to ocio (matched case/whitespace-insensitively), got %q (full map: %+v)", got, learned)
+	}
+	if _, exists := learned[classification.NormalizeDescription(uncorrected.Description)]; exists {
+		t.Fatalf("expected an uncorrected expense to not appear in learned categories, got %+v", learned)
+	}
+}
+
+func TestExpenseRepositoryGetLearnedCategoriesUsesMostRecentCorrection(t *testing.T) {
+	db := newExpenseTestDB(t)
+	repository := NewRepository(db)
+	baseDate := time.Now()
+
+	// Two rows sharing a description can end up corrected to different
+	// categories at different times (e.g. corrected once, then corrected
+	// again later after the user changed their mind). Set this up directly
+	// rather than via UpdateCategory, since UpdateCategory's own same-description
+	// cascade would otherwise keep both rows in sync with each other.
+	first := Expense{Date: baseDate, Description: "AMAZON PRIME", Amount: -10, Balance: 1, ImportedAt: baseDate, CategoryID: 2}
+	second := Expense{Date: baseDate, Description: "AMAZON PRIME", Amount: -12, Balance: 1, ImportedAt: baseDate, CategoryID: 1}
+	for _, expense := range []*Expense{&first, &second} {
+		if err := repository.Create(context.Background(), expense); err != nil {
+			t.Fatalf("Create failed: %v", err)
+		}
+	}
+	older := baseDate.Add(-time.Hour)
+	newer := baseDate
+	if _, err := db.Exec(`UPDATE expenses SET corrected_at = ? WHERE id = ?`, older, first.ID); err != nil {
+		t.Fatalf("set corrected_at: %v", err)
+	}
+	if _, err := db.Exec(`UPDATE expenses SET corrected_at = ? WHERE id = ?`, newer, second.ID); err != nil {
+		t.Fatalf("set corrected_at: %v", err)
+	}
+
+	learned, err := repository.GetLearnedCategories(context.Background())
+	if err != nil {
+		t.Fatalf("GetLearnedCategories failed: %v", err)
+	}
+	if got := learned[classification.NormalizeDescription("AMAZON PRIME")]; got != "casa" {
+		t.Fatalf("expected the more recently corrected row (casa) to win over the older one (ocio), got %q", got)
 	}
 }
 

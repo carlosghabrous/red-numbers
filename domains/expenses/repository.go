@@ -531,6 +531,38 @@ func (r *Repository) GetSpendingEntries(ctx context.Context, options FilterOptio
 	return entries, nil
 }
 
+// GetLearnedCategories returns a normalized-description -> category-name
+// mapping built from every expense a user has manually corrected, so a new
+// CSV import can apply past corrections to matching descriptions instead of
+// relying on the keyword classifier alone. When more than one corrected
+// expense shares a description, the most recent correction wins.
+func (r *Repository) GetLearnedCategories(ctx context.Context) (map[string]string, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT e.description, c.name
+		FROM expenses e
+		JOIN categories c ON c.id = e.category_id
+		WHERE e.corrected_at IS NOT NULL
+		ORDER BY e.corrected_at ASC`)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query learned categories: %w", err)
+	}
+	defer rows.Close()
+
+	learned := make(map[string]string)
+	for rows.Next() {
+		var description, categoryName string
+		if err := rows.Scan(&description, &categoryName); err != nil {
+			return nil, fmt.Errorf("failed to scan learned category: %w", err)
+		}
+		// Later rows (more recently corrected) overwrite earlier ones.
+		learned[classification.NormalizeDescription(description)] = categoryName
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate learned categories: %w", err)
+	}
+	return learned, nil
+}
+
 func max(first, second int) int {
 	if first > second {
 		return first

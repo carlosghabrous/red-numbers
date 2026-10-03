@@ -58,14 +58,40 @@ func (s *Service) ClassifyExpenses(ctx context.Context, expenseList []expenses.E
 		categoryIDs[category.Name] = int64(category.ID)
 	}
 
+	// Descriptions the user has manually corrected before take priority over
+	// the keyword classifier, so a re-import of a recurring merchant doesn't
+	// repeat a mistake that was already fixed once.
+	var learned map[string]string
+	if s.expenseRepo != nil {
+		learned, err = s.expenseRepo.GetLearnedCategories(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load learned categories: %w", err)
+		}
+	}
+
 	for index := range expenseList {
-		result := s.classifier.Classify(expenseList[index].Description, expenseList[index].Amount)
+		expense := &expenseList[index]
+		learnedCategory, isLearned := learned[classification.NormalizeDescription(expense.Description)]
+
+		var result classification.Classification
+		switch {
+		case expense.Amount > 0:
+			// The income rule is unconditional (see classifier.Classify) and
+			// must win over a learned description, consistent with the
+			// startup backfill that enforces it on every positive-amount row.
+			result = classification.Classification{CategoryName: "income", Confidence: "high"}
+		case isLearned:
+			result = classification.Classification{CategoryName: learnedCategory, Confidence: "high"}
+		default:
+			result = s.classifier.Classify(expense.Description, expense.Amount)
+		}
+
 		categoryID, exists := categoryIDs[result.CategoryName]
 		if !exists {
 			return nil, fmt.Errorf("category %q is not seeded", result.CategoryName)
 		}
-		expenseList[index].CategoryID = categoryID
-		expenseList[index].ConfidenceLevel = result.Confidence
+		expense.CategoryID = categoryID
+		expense.ConfidenceLevel = result.Confidence
 		classifications[index] = result
 	}
 	return classifications, nil
