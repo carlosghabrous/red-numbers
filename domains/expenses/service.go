@@ -60,15 +60,16 @@ func (s *Service) GetDashboard(ctx context.Context, options FilterOptions) (Dash
 	for _, category := range categoryList {
 		categoryNames[int64(category.ID)] = category.DisplayName
 	}
+	categoryColors := BuildCategoryColorIndex(categoryList)
 	return DashboardData{
 		Expenses:         expenseList,
 		Categories:       categoryList,
 		CategoryNames:    categoryNames,
 		TotalExpenses:    total,
 		Statistics:       stats,
-		PieSlices:        buildPieSlices(breakdown, categoryNames),
-		WeeklyHistogram:  BuildWeeklyHistogram(spendingEntries, categoryNames),
-		MonthlyHistogram: BuildMonthlyHistogram(spendingEntries, categoryNames),
+		PieSlices:        buildPieSlices(breakdown, categoryNames, categoryColors),
+		WeeklyHistogram:  BuildWeeklyHistogram(spendingEntries, categoryNames, categoryColors),
+		MonthlyHistogram: BuildMonthlyHistogram(spendingEntries, categoryNames, categoryColors),
 	}, nil
 }
 

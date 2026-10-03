@@ -40,16 +40,16 @@ type periodKeyFunc func(time.Time) (key, label string, sortTime time.Time)
 // periods. Using each week's actual Monday date (rather than a year+week-number
 // pair) as the grouping key avoids ambiguity at year boundaries, where a
 // single week can span two different years.
-func BuildWeeklyHistogram(entries []SpendingEntry, categoryNames map[int64]string) Histogram {
-	return buildHistogram(entries, categoryNames, func(date time.Time) (string, string, time.Time) {
+func BuildWeeklyHistogram(entries []SpendingEntry, categoryNames map[int64]string, categoryColors map[int64]string) Histogram {
+	return buildHistogram(entries, categoryNames, categoryColors, func(date time.Time) (string, string, time.Time) {
 		monday := mondayOf(date)
 		return monday.Format("2006-01-02"), monday.Format("02/01/2006"), monday
 	})
 }
 
 // BuildMonthlyHistogram aggregates spending entries into calendar-month periods.
-func BuildMonthlyHistogram(entries []SpendingEntry, categoryNames map[int64]string) Histogram {
-	return buildHistogram(entries, categoryNames, func(date time.Time) (string, string, time.Time) {
+func BuildMonthlyHistogram(entries []SpendingEntry, categoryNames map[int64]string, categoryColors map[int64]string) Histogram {
+	return buildHistogram(entries, categoryNames, categoryColors, func(date time.Time) (string, string, time.Time) {
 		firstOfMonth := time.Date(date.Year(), date.Month(), 1, 0, 0, 0, 0, date.Location())
 		return firstOfMonth.Format("2006-01"), firstOfMonth.Format("Jan 2006"), firstOfMonth
 	})
@@ -63,7 +63,7 @@ func mondayOf(date time.Time) time.Time {
 	return date.AddDate(0, 0, -offset)
 }
 
-func buildHistogram(entries []SpendingEntry, categoryNames map[int64]string, periodKey periodKeyFunc) Histogram {
+func buildHistogram(entries []SpendingEntry, categoryNames map[int64]string, categoryColors map[int64]string, periodKey periodKeyFunc) Histogram {
 	type periodAccumulator struct {
 		label      string
 		sortTime   time.Time
@@ -112,7 +112,7 @@ func buildHistogram(entries []SpendingEntry, categoryNames map[int64]string, per
 				CategoryID:   categoryID,
 				CategoryName: name,
 				Amount:       amount,
-				Color:        categoryColor(categoryID),
+				Color:        colorForCategory(categoryID, categoryColors),
 			})
 			total += amount
 		}

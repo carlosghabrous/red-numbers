@@ -54,7 +54,7 @@ func TestBuildWeeklyHistogramGroupsByWeekAndCategory(t *testing.T) {
 		{Date: monday.AddDate(0, 0, 13), Amount: 7, CategoryID: 1}, // week 2 (Sunday), Casa
 	}
 
-	histogram := BuildWeeklyHistogram(entries, categoryNamesFixture())
+	histogram := BuildWeeklyHistogram(entries, categoryNamesFixture(), nil)
 
 	if len(histogram.Periods) != 2 {
 		t.Fatalf("expected 2 weekly periods, got %d: %+v", len(histogram.Periods), histogram.Periods)
@@ -84,7 +84,7 @@ func TestBuildMonthlyHistogramGroupsByCalendarMonth(t *testing.T) {
 		{Date: time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC), Amount: 8, CategoryID: 2},
 	}
 
-	histogram := BuildMonthlyHistogram(entries, categoryNamesFixture())
+	histogram := BuildMonthlyHistogram(entries, categoryNamesFixture(), nil)
 
 	if len(histogram.Periods) != 2 {
 		t.Fatalf("expected 2 monthly periods, got %d", len(histogram.Periods))
@@ -104,7 +104,7 @@ func TestBuildHistogramHandlesYearBoundaryAcrossDecemberJanuary(t *testing.T) {
 		{Date: time.Date(2026, 1, 6, 0, 0, 0, 0, time.UTC), Amount: 3, CategoryID: 1}, // following week
 	}
 
-	weekly := BuildWeeklyHistogram(entries, categoryNamesFixture())
+	weekly := BuildWeeklyHistogram(entries, categoryNamesFixture(), nil)
 	if len(weekly.Periods) != 2 {
 		t.Fatalf("expected the Dec 31 and Jan 2 entries merged into one week spanning the year boundary, got %d periods: %+v", len(weekly.Periods), weekly.Periods)
 	}
@@ -112,7 +112,7 @@ func TestBuildHistogramHandlesYearBoundaryAcrossDecemberJanuary(t *testing.T) {
 		t.Errorf("expected the boundary-spanning week total to be 15, got %v", weekly.Periods[0].Total)
 	}
 
-	monthly := BuildMonthlyHistogram(entries, categoryNamesFixture())
+	monthly := BuildMonthlyHistogram(entries, categoryNamesFixture(), nil)
 	if len(monthly.Periods) != 2 {
 		t.Fatalf("expected December and January to remain separate monthly periods, got %d", len(monthly.Periods))
 	}
@@ -125,14 +125,14 @@ func TestBuildHistogramAppliesTenPercentHeadroomToMaxTotal(t *testing.T) {
 	entries := []SpendingEntry{
 		{Date: time.Now(), Amount: 100, CategoryID: 1},
 	}
-	histogram := BuildWeeklyHistogram(entries, categoryNamesFixture())
+	histogram := BuildWeeklyHistogram(entries, categoryNamesFixture(), nil)
 	if diff := histogram.MaxTotal - 110; diff > 0.001 || diff < -0.001 {
 		t.Errorf("expected MaxTotal = 100 * 1.1 = 110, got %v", histogram.MaxTotal)
 	}
 }
 
 func TestBuildHistogramEmptyInputProducesZeroPeriods(t *testing.T) {
-	histogram := BuildWeeklyHistogram(nil, categoryNamesFixture())
+	histogram := BuildWeeklyHistogram(nil, categoryNamesFixture(), nil)
 	if len(histogram.Periods) != 0 || histogram.MaxTotal != 0 {
 		t.Fatalf("expected an empty histogram for no entries, got %+v", histogram)
 	}
@@ -140,7 +140,7 @@ func TestBuildHistogramEmptyInputProducesZeroPeriods(t *testing.T) {
 
 func TestBuildHistogramFallsBackToUnclassifiedName(t *testing.T) {
 	entries := []SpendingEntry{{Date: time.Now(), Amount: 10, CategoryID: 999}}
-	histogram := BuildWeeklyHistogram(entries, categoryNamesFixture())
+	histogram := BuildWeeklyHistogram(entries, categoryNamesFixture(), nil)
 	if len(histogram.Periods) != 1 || histogram.Periods[0].Bars[0].CategoryName != "Sin clasificar" {
 		t.Fatalf("expected unknown category to fall back to 'Sin clasificar', got %+v", histogram.Periods)
 	}
